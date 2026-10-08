@@ -1314,123 +1314,24 @@ min-width: 0;
 
 </div>
 
-                <div id="view-evidence" class="view">
+                                <div id="view-evidence" class="view">
                     <div class="page-header">
                         <div>
                             <h2 class="page-title">Evidence Repository</h2>
                             <p class="page-subtitle">Correlated artifacts mapped across investigations.</p>
                         </div>
                     </div>
-
-
-<div class="grid-4 mb-4">
-    <div class="card">
-        <div class="kpi-label">Total Artifacts</div>
-        <div class="kpi-value">2</div>
-    </div>
-    <div class="card">
-        <div class="kpi-label">High-Confidence Malicious</div>
-        <div class="kpi-value" style="color: var(--critical);">2</div>
-    </div>
-    <div class="card">
-        <div class="kpi-label">Related Alerts</div>
-        <div class="kpi-value">1</div>
-    </div>
-    <div class="card">
-        <div class="kpi-label">Source Agents</div>
-        <div class="kpi-value">2</div>
-    </div>
-</div>
-
-
-
-
-                    <div class="card">
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Artifact Value</th>
-                                        <th>Type</th>
-                                        <th>Source Agent</th>
-                                        <th>Related Alert</th>
-                                        <th>Malicious Confidence</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td style="font-family: monospace;">powershell.exe -enc JABz...</td>
-                                        <td>Process Command</td>
-                                        <td>Endpoint Agent</td>
-                                        <td><a href="#" class="text-accent">ALT-2026-001</a></td>
-                                        <td><span class="badge sev-critical">98%</span></td>
-                                    </tr>
-                                    <tr>
-                                        <td style="font-family: monospace;">185.15.22.x</td>
-                                        <td>IP Address</td>
-                                        <td>Network Agent</td>
-                                        <td><a href="#" class="text-accent">ALT-2026-001</a></td>
-                                        <td><span class="badge sev-high">87%</span></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                    <div id="evidence-content"></div>
                 </div>
 
-                <div id="view-governance" class="view">
+                                <div id="view-governance" class="view">
                     <div class="page-header">
                         <div>
-                            <h2 class="page-title">Governance & Audit</h2>
-                            <p class="page-subtitle">Immutable log of Human-in-the-Loop decisions and AI actions.</p>
+                            <h2 class="page-title">Governance Overview</h2>
+                            <p class="page-subtitle">Live summary of Human-in-the-Loop activity and structural controls.</p>
                         </div>
                     </div>
-
-                    <div class="mock-warning-banner">
-                        <i class="ph-fill ph-shield-warning" style="font-size: 24px;"></i>
-                        <div>
-                            <strong>GOVERNANCE POLICY:</strong> AI-generated recommendations do not constitute autonomous security decisions. All system isolation, user suspension, or ticket closure actions MUST be explicitly authorized by a Tier 2+ SOC Analyst.
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Timestamp</th>
-                                        <th>Event</th>
-                                        <th>Actor</th>
-                                        <th>Action</th>
-                                        <th>Decision</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>2 min ago</td>
-                                        <td>Risk Threshold Exceeded</td>
-                                        <td><span class="badge badge-outline">Risk Engine</span></td>
-                                        <td>Recommendation Generated</td>
-                                        <td>Escalate</td>
-                                    </tr>
-                                    <tr>
-                                        <td>45 min ago</td>
-                                        <td>Analyst Review</td>
-                                        <td><span class="badge badge-outline">SOC Analyst (SA)</span></td>
-                                        <td>Host Isolation Approval</td>
-                                        <td><span class="badge sev-low">APPROVED</span></td>
-                                    </tr>
-                                    <tr>
-                                        <td>3 hrs ago</td>
-                                        <td>Analyst Review</td>
-                                        <td><span class="badge badge-outline">SOC Analyst (SA)</span></td>
-                                        <td>Account Suspension</td>
-                                        <td><span class="badge sev-critical">REJECTED</span></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                    <div id="governance-content"></div>
                 </div>
                 
                                <!-- Model Comparison View -->
@@ -1589,10 +1490,12 @@ min-width: 0;
                         // Context specific renders if needed
             if (viewId === 'view-dashboard') renderDashboard();
             if (viewId === 'view-agents') renderAgentsPage();
-            if (viewId === 'view-models') renderModelsPage();
+                        if (viewId === 'view-models') renderModelsPage();
             if (viewId === 'view-guardrails') renderGuardrailsPage();
             if (viewId === 'view-audit') renderAuditPage();
             if (viewId === 'view-scope') renderScopePage();
+            if (viewId === 'view-evidence') renderEvidencePage();
+            if (viewId === 'view-governance') renderGovernancePage();
         }
 
         function renderDashboard() {
@@ -2091,6 +1994,10 @@ async function analyzeCurrentAlert() {
         await investigateAlert(alert);
 
 alert.status = 'Pending Review';
+
+// Collect evidence artifacts from this investigation
+extractEvidence(alert, summaryText ? summaryText.textContent : '');
+if (appState.currentPage === 'view-evidence') renderEvidencePage();
 
 // Append to audit log
 appendAuditEntry({
@@ -2610,7 +2517,221 @@ function selectAgent(index) {
             );
         }
 
-                // ---------- NEW PAGE RENDERERS (content added in Chunk 2) ----------
+                      // ---------- LIVE EVIDENCE STATE ----------
+        // Populated from the AI investigation output each time an alert is analysed
+        const evidenceStore = [];
+
+        function extractEvidence(alert, summaryText) {
+            if (!alert) return;
+            const artifacts = [];
+
+            if (alert.hash) {
+                artifacts.push({ value: alert.hash.substring(0, 24) + '…', type: 'File Hash (SHA-256)', agent: 'Threat Intelligence', alert: alert.id, confidence: 85 });
+            }
+            if (alert.domain) {
+                const domainMalicious = /c2|phish|malware|tunnel|update-check/i.test(alert.domain);
+                artifacts.push({ value: alert.domain, type: 'Domain', agent: 'Threat Intelligence', alert: alert.id, confidence: domainMalicious ? 92 : 45 });
+            }
+            if (alert.destination_ip) {
+                const external = !/^10\.|^192\.168|^172\.(1[6-9]|2[0-9]|3[01])/.test(alert.destination_ip);
+                artifacts.push({ value: alert.destination_ip, type: 'IP Address', agent: 'Network Context', alert: alert.id, confidence: external ? 78 : 30 });
+            }
+            if (alert.source_ip) {
+                artifacts.push({ value: alert.source_ip, type: 'Source IP', agent: 'Network Context', alert: alert.id, confidence: 40 });
+            }
+            if (alert.user) {
+                artifacts.push({ value: alert.user, type: 'User Account', agent: 'Identity & User Context', alert: alert.id, confidence: 55 });
+            }
+            if (alert.asset) {
+                artifacts.push({ value: alert.asset, type: 'Asset', agent: 'Asset & Device Context', alert: alert.id, confidence: 50 });
+            }
+            if (/powershell|encoded|-enc/i.test(alert.description || '')) {
+                artifacts.push({ value: 'powershell.exe -enc […]', type: 'Process Command', agent: 'Alert Correlation', alert: alert.id, confidence: 88 });
+            }
+
+            // Unshift so newest first, cap at 30
+            artifacts.forEach(a => evidenceStore.unshift(a));
+            if (evidenceStore.length > 30) evidenceStore.length = 30;
+        }
+
+        function renderEvidencePage() {
+            const el = document.getElementById('evidence-content');
+            if (!el) return;
+
+            const total = evidenceStore.length;
+            const highConf = evidenceStore.filter(a => a.confidence >= 80).length;
+            const uniqueAlerts = new Set(evidenceStore.map(a => a.alert)).size;
+            const uniqueAgents = new Set(evidenceStore.map(a => a.agent)).size;
+
+            if (total === 0) {
+                el.innerHTML = `
+                    <div class="grid-4 mb-4">
+                        <div class="card"><div class="kpi-label">Total Artifacts</div><div class="kpi-value">0</div></div>
+                        <div class="card"><div class="kpi-label">High-Confidence Malicious</div><div class="kpi-value" style="color: var(--critical);">0</div></div>
+                        <div class="card"><div class="kpi-label">Related Alerts</div><div class="kpi-value">0</div></div>
+                        <div class="card"><div class="kpi-label">Source Agents</div><div class="kpi-value">0</div></div>
+                    </div>
+                    <div class="card" style="padding: 40px; text-align: center; color: var(--text-secondary);">
+                        <i class="ph ph-files" style="font-size: 36px; display: block; margin-bottom: 12px;"></i>
+                        <div style="font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">No evidence collected yet</div>
+                        <div style="font-size: 13px;">Run an AI investigation from the Alerts page and its correlated artifacts will appear here.</div>
+                    </div>
+                `;
+                return;
+            }
+
+            el.innerHTML = `
+                <div class="grid-4 mb-4">
+                    <div class="card"><div class="kpi-label">Total Artifacts</div><div class="kpi-value">${total}</div></div>
+                    <div class="card"><div class="kpi-label">High-Confidence Malicious</div><div class="kpi-value" style="color: var(--critical);">${highConf}</div></div>
+                    <div class="card"><div class="kpi-label">Related Alerts</div><div class="kpi-value">${uniqueAlerts}</div></div>
+                    <div class="card"><div class="kpi-label">Source Agents</div><div class="kpi-value">${uniqueAgents}</div></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Collected Artifacts</span>
+                        <span class="badge badge-outline">${total} artifacts</span>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Artifact Value</th>
+                                    <th>Type</th>
+                                    <th>Source Agent</th>
+                                    <th>Related Alert</th>
+                                    <th>Confidence</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${evidenceStore.map(a => {
+                                    const cls = a.confidence >= 80 ? 'sev-critical' : a.confidence >= 60 ? 'sev-high' : a.confidence >= 40 ? 'sev-medium' : 'sev-low';
+                                    return `
+                                        <tr>
+                                            <td style="font-family: monospace; font-size: 12px;">${a.value}</td>
+                                            <td>${a.type}</td>
+                                            <td>${a.agent}</td>
+                                            <td><a href="#" class="text-accent" onclick="event.preventDefault();openInvestigation('${a.alert}')">${a.alert}</a></td>
+                                            <td><span class="badge ${cls}">${a.confidence}%</span></td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderGovernancePage() {
+            const el = document.getElementById('governance-content');
+            if (!el) return;
+
+            const approvals = auditEntries.filter(e => e.decision === 'APPROVED').length;
+            const rejections = auditEntries.filter(e => e.decision === 'REJECTED').length;
+            const escalations = auditEntries.filter(e => e.decision === 'ESCALATE' || e.decision === 'ESCALATED').length;
+            const investigations = auditEntries.filter(e => e.event === 'AI Investigation').length;
+
+            el.innerHTML = `
+                <div class="mock-warning-banner">
+                    <i class="ph-fill ph-shield-warning" style="font-size: 24px;"></i>
+                    <div>
+                        <strong>GOVERNANCE POLICY:</strong> AI-generated recommendations do not constitute autonomous security decisions. All system isolation, user suspension, or ticket closure actions MUST be explicitly authorized by a Tier 2+ SOC Analyst.
+                    </div>
+                </div>
+
+                <div class="grid-4 mb-4">
+                    <div class="card"><div class="kpi-label">AI Investigations</div><div class="kpi-value">${investigations}</div></div>
+                    <div class="card"><div class="kpi-label">Analyst Approvals</div><div class="kpi-value" style="color: var(--success);">${approvals}</div></div>
+                    <div class="card"><div class="kpi-label">Analyst Rejections</div><div class="kpi-value" style="color: var(--critical);">${rejections}</div></div>
+                    <div class="card"><div class="kpi-label">Escalations Fired</div><div class="kpi-value" style="color: var(--high);">${escalations}</div></div>
+                </div>
+
+                <div class="grid-3 mb-4">
+                    <div class="card" style="grid-column: span 2;">
+                        <div class="card-header">
+                            <span class="card-title">Structural Controls — Always Enforced</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg-base); border-radius: var(--radius-md);">
+                                <span>No autonomous high-impact actions</span>
+                                <span class="badge sev-low">ENFORCED</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg-base); border-radius: var(--radius-md);">
+                                <span>Mandatory Human-in-the-Loop approval gate</span>
+                                <span class="badge sev-low">ENFORCED</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg-base); border-radius: var(--radius-md);">
+                                <span>Structured output schema (6 required sections)</span>
+                                <span class="badge sev-low">ENFORCED</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg-base); border-radius: var(--radius-md);">
+                                <span>Uncertainty as first-class output field</span>
+                                <span class="badge sev-low">ENFORCED</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg-base); border-radius: var(--radius-md);">
+                                <span>Refusal to fabricate under tool failure</span>
+                                <span class="badge sev-low">VALIDATED</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Framework Alignment</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 10px; font-size: 12px;">
+                            <div style="display: flex; justify-content: space-between;"><span>NIST AI RMF — Govern</span><span class="badge sev-medium">Partial</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>NIST AI RMF — Measure</span><span class="badge sev-medium">Partial</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>OWASP LLM01 — Prompt Injection</span><span class="badge sev-medium">Partial</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>OWASP LLM08 — Excessive Agency</span><span class="badge sev-low">Strong</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>MITRE ATT&CK</span><span class="badge badge-outline">Informational</span></div>
+                            <div style="margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); line-height: 1.6;">
+                                Full mapping available on the <strong style="color: var(--accent); cursor: pointer;" onclick="navigateTo('view-guardrails')">Guardrails page</strong>.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Recent Governance Activity</span>
+                        <button class="btn btn-outline" onclick="navigateTo('view-audit')">View Full Audit Log</button>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Alert</th>
+                                    <th>Event</th>
+                                    <th>Decision</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${auditEntries.slice(0, 5).map(e => {
+                                    const badgeClass = e.decisionType === 'low' ? 'sev-low'
+                                                     : e.decisionType === 'critical' ? 'sev-critical'
+                                                     : e.decisionType === 'high' ? 'sev-high'
+                                                     : 'badge-outline';
+                                    return `
+                                        <tr>
+                                            <td style="font-size: 12px; color: var(--text-muted);">${e.ts}</td>
+                                            <td style="color: var(--accent);">${e.alert}</td>
+                                            <td>${e.event}</td>
+                                            <td><span class="badge ${badgeClass}">${e.decision}</span></td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ---------- NEW PAGE RENDERERS (content added in Chunk 2) ----------
                 function renderModelsPage() {
             const el = document.getElementById('models-content');
             if (!el) return;
