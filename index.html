@@ -717,7 +717,7 @@ min-width: 0;
                         <i class="ph ph-cpu"></i> Agents
                     </a>
                 </li>
-                <li>
+                                <li>
                     <a href="#" class="nav-item" data-target="view-evidence">
                         <i class="ph ph-files"></i> Evidence
                     </a>
@@ -725,6 +725,26 @@ min-width: 0;
                 <li>
                     <a href="#" class="nav-item" data-target="view-governance">
                         <i class="ph ph-scales"></i> Governance
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-item" data-target="view-guardrails">
+                        <i class="ph ph-shield-check"></i> Guardrails
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-item" data-target="view-audit">
+                        <i class="ph ph-clipboard-text"></i> Audit Log
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-item" data-target="view-models">
+                        <i class="ph ph-chart-bar"></i> Model Comparison
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-item" data-target="view-scope">
+                        <i class="ph ph-target"></i> Scope
                     </a>
                 </li>
                 <li style="margin-top: 24px;">
@@ -1364,6 +1384,50 @@ min-width: 0;
                     </div>
                 </div>
                 
+                               <!-- Model Comparison View -->
+                <div id="view-models" class="view">
+                    <div class="page-header">
+                        <div>
+                            <h2 class="page-title">Open-Model Comparative Evaluation</h2>
+                            <p class="page-subtitle">Three open-weight models compared on identical cases, prompts, and evidence.</p>
+                        </div>
+                    </div>
+                    <div id="models-content"></div>
+                </div>
+
+                <!-- Guardrails View -->
+                <div id="view-guardrails" class="view">
+                    <div class="page-header">
+                        <div>
+                            <h2 class="page-title">Guardrails & Governance Mapping</h2>
+                            <p class="page-subtitle">Risk → Guardrail → Governance Requirement → Implementation Status.</p>
+                        </div>
+                    </div>
+                    <div id="guardrails-content"></div>
+                </div>
+
+                <!-- Audit Log View -->
+                <div id="view-audit" class="view">
+                    <div class="page-header">
+                        <div>
+                            <h2 class="page-title">Audit Log</h2>
+                            <p class="page-subtitle">Immutable record of AI recommendations and analyst decisions.</p>
+                        </div>
+                    </div>
+                    <div id="audit-content"></div>
+                </div>
+
+                <!-- Scope View -->
+                <div id="view-scope" class="view">
+                    <div class="page-header">
+                        <div>
+                            <h2 class="page-title">Scope & Design Principles</h2>
+                            <p class="page-subtitle">What the prototype covers, what it does not, and the reasoning behind each choice.</p>
+                        </div>
+                    </div>
+                    <div id="scope-content"></div>
+                </div>
+
                 <div id="view-settings" class="view">
                     <div class="page-header">
                         <div>
@@ -1471,9 +1535,13 @@ min-width: 0;
             // Close mobile menu if open
             document.getElementById('sidebar').classList.remove('mobile-open');
 
-            // Context specific renders if needed
+                        // Context specific renders if needed
             if (viewId === 'view-dashboard') renderDashboard();
-if (viewId === 'view-agents') renderAgentsPage();
+            if (viewId === 'view-agents') renderAgentsPage();
+            if (viewId === 'view-models') renderModelsPage();
+            if (viewId === 'view-guardrails') renderGuardrailsPage();
+            if (viewId === 'view-audit') renderAuditPage();
+            if (viewId === 'view-scope') renderScopePage();
         }
 
         function renderDashboard() {
@@ -2397,6 +2465,27 @@ function selectAgent(index) {
                     `;
                 }
             );
+        }
+
+                // ---------- NEW PAGE RENDERERS (content added in Chunk 2) ----------
+        function renderModelsPage() {
+            const el = document.getElementById('models-content');
+            if (el) el.innerHTML = '<div class="card"><p style="color: var(--text-secondary);">Loading model comparison data...</p></div>';
+        }
+
+        function renderGuardrailsPage() {
+            const el = document.getElementById('guardrails-content');
+            if (el) el.innerHTML = '<div class="card"><p style="color: var(--text-secondary);">Loading guardrails mapping...</p></div>';
+        }
+
+        function renderAuditPage() {
+            const el = document.getElementById('audit-content');
+            if (el) el.innerHTML = '<div class="card"><p style="color: var(--text-secondary);">Loading audit entries...</p></div>';
+        }
+
+        function renderScopePage() {
+            const el = document.getElementById('scope-content');
+            if (el) el.innerHTML = '<div class="card"><p style="color: var(--text-secondary);">Loading scope...</p></div>';
         }
 
         // Initialize on load
