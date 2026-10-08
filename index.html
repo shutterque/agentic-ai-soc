@@ -677,7 +677,56 @@ min-width: 0;
             .grid-4, .grid-5, .grid-3, .grid-2 { grid-template-columns: 1fr; }
         }
 
-        #mobile-menu-btn { display: none; margin-right: 16px; }
+                #mobile-menu-btn { display: none; margin-right: 16px; }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .toast {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-light);
+            border-left: 3px solid var(--accent);
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+            min-width: 280px;
+            max-width: 400px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 13px;
+            color: var(--text-primary);
+            animation: slideIn 0.3s ease;
+            pointer-events: auto;
+        }
+        .toast.success { border-left-color: var(--success); }
+        .toast.warning { border-left-color: var(--warning); }
+        .toast.error   { border-left-color: var(--critical); }
+        .toast i { font-size: 18px; margin-top: 1px; }
+        .toast.success i { color: var(--success); }
+        .toast.warning i { color: var(--warning); }
+        .toast.error   i { color: var(--critical); }
+        .toast-content { flex: 1; }
+        .toast-title { font-weight: 600; margin-bottom: 2px; }
+        .toast-body  { font-size: 12px; color: var(--text-secondary); }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(30px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slideOut {
+            from { opacity: 1; transform: translateX(0); }
+            to   { opacity: 0; transform: translateX(30px); }
+        }
+        .toast.removing { animation: slideOut 0.3s ease forwards; }
     </style>
 </head>
 <body>
@@ -1443,6 +1492,8 @@ min-width: 0;
         </main>
     </div>
 
+        <div class="toast-container" id="toast-container"></div>
+
     <div class="modal-overlay" id="custom-modal">
         <div class="modal-box">
             <div class="modal-title" id="modal-title">Confirm Action</div>
@@ -2041,6 +2092,19 @@ async function analyzeCurrentAlert() {
 
 alert.status = 'Pending Review';
 
+// Append to audit log
+appendAuditEntry({
+    ts: 'Just now',
+    event: 'AI Investigation',
+    actor: 'Multi-Agent Workflow',
+    action: 'Investigation completed — 5 specialist tools called',
+    decision: 'COMPLETED',
+    decisionType: 'low',
+    alert: alert.id
+});
+
+// Toast notification
+showToast('success', 'Investigation Complete', `AI analysis for ${alert.id} returned. Review the recommendation.`);
 
 investigationActivity.unshift({
     time: new Date().toLocaleTimeString([], {
@@ -2422,27 +2486,88 @@ function selectAgent(index) {
             document.getElementById('custom-modal').classList.remove('show');
         }
 
-        function triggerAction(actionName) {
+                function triggerAction(actionName) {
             showModal(
-                `Confirm Action: ${actionName}`, 
+                `Confirm Action: ${actionName}`,
                 `Are you sure you want to execute '${actionName}' on ${appState.selectedAlertId}? This will be logged in the governance audit trail.`,
                 () => {
-                    // Update UI status to simulate action
-                    if (actionName === 'Resolve Alert' || actionName === 'Close Alert') {
-                        document.getElementById('inv-status').innerText = 'RESOLVED';
-                        document.getElementById('inv-status').className = 'badge sev-low';
-                        
-                        // Show a small inline success toast or simply update the DOM
-                        const statusObj = document.getElementById('system-status');
-                        const oldHTML = statusObj.innerHTML;
-                        statusObj.innerHTML = `<i class="ph-fill ph-check-circle"></i> Action Logged`;
-                        setTimeout(() => statusObj.innerHTML = oldHTML, 3000);
+                    const statusEl = document.getElementById('inv-status');
+
+                    // Update the investigation status based on action
+                    if (actionName === 'Resolve Alert') {
+                        statusEl.innerText = 'RESOLVED';
+                        statusEl.className = 'badge sev-low';
+                    } else if (actionName === 'Close Alert') {
+                        statusEl.innerText = 'CLOSED';
+                        statusEl.className = 'badge sev-low';
+                    } else if (actionName === 'Escalate Alert') {
+                        statusEl.innerText = 'ESCALATED';
+                        statusEl.className = 'badge sev-critical';
+                    } else if (actionName === 'Assign to me') {
+                        statusEl.innerText = 'ASSIGNED';
+                        statusEl.className = 'badge sev-medium';
+                    } else if (actionName === 'Request More Evidence') {
+                        statusEl.innerText = 'INVESTIGATING';
+                        statusEl.className = 'badge sev-medium';
                     }
+
+                    // Determine audit decision type
+                    let decisionType = 'outline';
+                    let decision = actionName.toUpperCase().replace(/\s+/g, '_');
+                    if (actionName === 'Resolve Alert' || actionName === 'Close Alert') { decisionType = 'low'; }
+                    if (actionName === 'Escalate Alert') { decisionType = 'high'; }
+
+                    // Append to audit log
+                    appendAuditEntry({
+                        ts: 'Just now',
+                        event: 'Analyst Action',
+                        actor: 'Sr. Analyst (SA)',
+                        action: actionName,
+                        decision: decision,
+                        decisionType: decisionType,
+                        alert: appState.selectedAlertId || 'N/A'
+                    });
+
+                    // Toast
+                    showToast(
+                        actionName === 'Escalate Alert' ? 'warning' : 'success',
+                        `Action: ${actionName}`,
+                        `Recorded in audit log for ${appState.selectedAlertId || 'selected alert'}.`
+                    );
                 }
             );
         }
 
-        function triggerApproval(isApproved) {
+        // ---------- Toast notifications ----------
+        function showToast(type, title, body) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+
+            const iconMap = {
+                success: 'ph-fill ph-check-circle',
+                warning: 'ph-fill ph-warning-circle',
+                error:   'ph-fill ph-x-circle',
+                info:    'ph-fill ph-info'
+            };
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <i class="${iconMap[type] || iconMap.info}"></i>
+                <div class="toast-content">
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-body">${body}</div>
+                </div>
+            `;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('removing');
+                setTimeout(() => toast.remove(), 300);
+            }, 4500);
+        }
+
+                function triggerApproval(isApproved) {
             const action = isApproved ? 'Approve AI Recommendation' : 'Reject AI Recommendation';
             showModal(
                 `Human-in-the-Loop: ${action}`,
@@ -2451,8 +2576,7 @@ function selectAgent(index) {
                     const statusEl = document.getElementById('inv-status');
                     statusEl.innerText = isApproved ? 'ESCALATED' : 'INVESTIGATING';
                     statusEl.className = isApproved ? 'badge sev-critical' : 'badge badge-outline';
-                    
-                    // Modify the human review panel to reflect decision
+
                     const reviewPanel = document.querySelector('.human-review-panel');
                     reviewPanel.style.borderColor = isApproved ? 'var(--success)' : 'var(--critical)';
                     reviewPanel.style.background = isApproved ? 'var(--success-bg)' : 'var(--critical-bg)';
@@ -2463,6 +2587,25 @@ function selectAgent(index) {
                         <p style="font-size: 13px;">You have <strong>${isApproved ? 'APPROVED' : 'REJECTED'}</strong> the AI recommendation.</p>
                         <p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Action logged at ${new Date().toLocaleTimeString()}</p>
                     `;
+
+                    // Append to audit log
+                    appendAuditEntry({
+                        ts: 'Just now',
+                        event: 'Analyst Review',
+                        actor: 'Sr. Analyst (SA)',
+                        action: isApproved ? 'AI Recommendation Approved — response action authorised' : 'AI Recommendation Rejected — investigation reopened',
+                        decision: isApproved ? 'APPROVED' : 'REJECTED',
+                        decisionType: isApproved ? 'low' : 'critical',
+                        alert: appState.selectedAlertId || 'N/A'
+                    });
+
+                    showToast(
+                        isApproved ? 'success' : 'warning',
+                        isApproved ? 'Recommendation Approved' : 'Recommendation Rejected',
+                        isApproved
+                            ? 'Response action authorised. Entry recorded in audit log.'
+                            : 'Investigation reopened. Entry recorded in audit log.'
+                    );
                 }
             );
         }
