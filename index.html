@@ -1852,6 +1852,29 @@ if (threatRisk) {
     document.getElementById('risk-ti').innerText = threatRisk;
 }
 
+// Fallback: if the AI output did not contain parseable RISK_* fields,
+// derive the risk panel from the alert's own severity so the view is
+// never left in a stale "Awaiting Analysis" state.
+if (!riskScore) {
+    const currentAlert = mockAlerts.find(a => a.id === appState.selectedAlertId);
+    if (currentAlert) {
+        const sev = (currentAlert.severity || 'Medium').toUpperCase();
+        const riskEl = document.getElementById('inv-risk');
+        if (riskEl) {
+            riskEl.innerText = (currentAlert.risk || 0) + '/100';
+            riskEl.className = 'badge ' + getSeverityClass(currentAlert.severity);
+        }
+        const endpointEl = document.getElementById('risk-endpoint');
+        const networkEl = document.getElementById('risk-network');
+        const identityEl = document.getElementById('risk-identity');
+        const tiEl = document.getElementById('risk-ti');
+        if (endpointEl) endpointEl.innerText = sev;
+        if (networkEl) networkEl.innerText = sev;
+        if (identityEl) identityEl.innerText = 'MEDIUM';
+        if (tiEl) tiEl.innerText = sev;
+    }
+}
+
 
 if (placeholder) {
     placeholder.style.display = 'none';
@@ -1996,7 +2019,7 @@ async function analyzeCurrentAlert() {
 alert.status = 'Pending Review';
 
 // Collect evidence artifacts from this investigation
-extractEvidence(alert, summaryText ? summaryText.textContent : '');
+extractEvidence(alert);
 if (appState.currentPage === 'view-evidence') renderEvidencePage();
 
 // Append to audit log
