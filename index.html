@@ -726,7 +726,110 @@ min-width: 0;
             from { opacity: 1; transform: translateX(0); }
             to   { opacity: 0; transform: translateX(30px); }
         }
-        .toast.removing { animation: slideOut 0.3s ease forwards; }
+                .toast.removing { animation: slideOut 0.3s ease forwards; }
+
+        /* Search results dropdown */
+        .search-results {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 50;
+            display: none;
+        }
+        .search-results.show { display: block; }
+        .search-result-item {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: background 0.15s;
+        }
+        .search-result-item:last-child { border-bottom: none; }
+        .search-result-item:hover { background: var(--bg-panel-hover); }
+        .search-result-item .id { color: var(--accent); font-weight: 600; font-size: 12px; }
+        .search-result-item .detail { font-size: 12px; color: var(--text-secondary); }
+
+        /* Notification dropdown */
+        .notification-wrapper { position: relative; }
+        .notification-dropdown {
+            position: absolute;
+            top: calc(100% + 12px);
+            right: 0;
+            width: 380px;
+            max-width: 90vw;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            z-index: 50;
+            display: none;
+            overflow: hidden;
+        }
+        .notification-dropdown.show { display: block; }
+        .notification-header {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .notification-header button {
+            font-size: 11px;
+            color: var(--accent);
+            font-weight: 500;
+        }
+        .notification-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .notification-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .notification-item:last-child { border-bottom: none; }
+        .notification-item.unread { background: rgba(14, 165, 233, 0.05); }
+        .notification-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--accent); flex-shrink: 0; margin-top: 5px;
+        }
+        .notification-item.read .notification-dot { background: var(--border-light); }
+        .notification-body { flex: 1; }
+        .notification-title { font-weight: 600; margin-bottom: 2px; }
+        .notification-meta { color: var(--text-muted); font-size: 11px; margin-top: 3px; }
+
+        .notification-badge {
+            position: absolute;
+            top: -4px;
+            right: -6px;
+            background: var(--critical);
+            color: #fff;
+            font-size: 9px;
+            font-weight: 700;
+            min-width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 4px;
+            border: 2px solid var(--bg-panel);
+        }
+        .notification-badge.hidden { display: none; }
     </style>
 </head>
 <body>
@@ -808,11 +911,16 @@ min-width: 0;
         <main class="main-content">
             <!-- Header -->
             <header class="header">
-                <div style="display: flex; align-items: center;">
+                                <div style="display: flex; align-items: center;">
                     <button class="icon-btn" id="mobile-menu-btn"><i class="ph ph-list"></i></button>
-                    <div class="header-search">
+                    <div class="header-search" style="position: relative;">
                         <i class="ph ph-magnifying-glass"></i>
-                        <input type="text" placeholder="Search alerts, endpoints, users (e.g. FIN-WS-042)">
+                        <input
+                            type="text"
+                            id="global-search-input"
+                            placeholder="Search alerts, endpoints, users (e.g. FIN-WS-042)"
+                            autocomplete="off">
+                        <div class="search-results" id="search-results"></div>
                     </div>
                 </div>
 
@@ -821,7 +929,19 @@ min-width: 0;
                         <div class="status-dot"></div>
                         <span>SYSTEM ONLINE</span>
                     </div>
-                    <button class="icon-btn"><i class="ph ph-bell"></i></button>
+                    <div class="notification-wrapper">
+                        <button class="icon-btn" id="notification-btn" style="position: relative;">
+                            <i class="ph ph-bell"></i>
+                            <span class="notification-badge hidden" id="notification-badge">0</span>
+                        </button>
+                        <div class="notification-dropdown" id="notification-dropdown">
+                            <div class="notification-header">
+                                <span>Notifications</span>
+                                <button onclick="markAllNotificationsRead()">Mark all as read</button>
+                            </div>
+                            <div class="notification-list" id="notification-list"></div>
+                        </div>
+                    </div>
                     <div class="user-profile">
                         <div class="avatar">SA</div>
                         <div style="display: flex; flex-direction: column;">
@@ -2101,6 +2221,9 @@ appendAuditEntry({
 
 // Toast notification
 showToast('success', 'Investigation Complete', `AI analysis for ${alert.id} returned. Review the recommendation.`);
+
+// Push notification to bell
+pushNotification('Investigation Complete', `AI analysis for ${alert.id} is ready for review.`, alert.id);
 
 investigationActivity.unshift({
     time: new Date().toLocaleTimeString([], {
@@ -3407,6 +3530,166 @@ function selectAgent(index) {
                 </div>
             `;
         }
+
+               // ---------- GLOBAL SEARCH ----------
+        function initSearch() {
+            const input = document.getElementById('global-search-input');
+            const results = document.getElementById('search-results');
+            if (!input || !results) return;
+
+            input.addEventListener('input', (e) => {
+                const q = e.target.value.trim().toLowerCase();
+                if (q.length < 1) { results.classList.remove('show'); return; }
+
+                const matches = mockAlerts.filter(a =>
+                    (a.id || '').toLowerCase().includes(q) ||
+                    (a.asset || '').toLowerCase().includes(q) ||
+                    (a.user || '').toLowerCase().includes(q) ||
+                    (a.type || '').toLowerCase().includes(q) ||
+                    (a.source || '').toLowerCase().includes(q) ||
+                    (a.source_ip || '').toLowerCase().includes(q) ||
+                    (a.domain || '').toLowerCase().includes(q)
+                ).slice(0, 8);
+
+                if (matches.length === 0) {
+                    results.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px;">No alerts match "${e.target.value}"</div>`;
+                } else {
+                    results.innerHTML = matches.map(a => `
+                        <div class="search-result-item" onclick="handleSearchSelect('${a.id}')">
+                            <span class="badge ${getSeverityClass(a.severity)}">${a.severity}</span>
+                            <div style="flex: 1; min-width: 0;">
+                                <div class="id">${a.id}</div>
+                                <div class="detail">${a.type} · ${a.asset} · ${a.user}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                results.classList.add('show');
+            });
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') { input.blur(); results.classList.remove('show'); }
+                if (e.key === 'Enter') {
+                    const first = results.querySelector('.search-result-item');
+                    if (first) first.click();
+                }
+            });
+
+            // Close on outside click
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.header-search')) {
+                    results.classList.remove('show');
+                }
+            });
+        }
+
+        function handleSearchSelect(alertId) {
+            const input = document.getElementById('global-search-input');
+            const results = document.getElementById('search-results');
+            if (input) input.value = '';
+            if (results) results.classList.remove('show');
+            openInvestigation(alertId);
+        }
+
+        // ---------- NOTIFICATIONS ----------
+        const notifications = [
+            { id: 1, title: 'Risk threshold exceeded', body: 'ALT-2026-001 flagged as Critical by the orchestrator.', time: '2 min ago', read: false, alert: 'ALT-2026-001' },
+            { id: 2, title: 'Human approval required', body: 'ALT-2026-021 awaiting analyst decision.', time: '18 min ago', read: false, alert: 'ALT-2026-021' },
+            { id: 3, title: 'Escalation sent', body: 'Gmail notification delivered to Tier 2 team.', time: '1 hr ago', read: true, alert: 'ALT-2026-005' },
+            { id: 4, title: 'Model comparison complete', body: 'Three-model evaluation on T1/T2/T3 finished.', time: '18 hrs ago', read: true, alert: 'ALT-2026-004' }
+        ];
+
+        function initNotifications() {
+            const btn = document.getElementById('notification-btn');
+            const dropdown = document.getElementById('notification-dropdown');
+            if (!btn || !dropdown) return;
+
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdown.classList.toggle('show');
+                if (dropdown.classList.contains('show')) {
+                    renderNotifications();
+                }
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.notification-wrapper')) {
+                    dropdown.classList.remove('show');
+                }
+            });
+
+            renderNotifications();
+        }
+
+        function renderNotifications() {
+            const list = document.getElementById('notification-list');
+            const badge = document.getElementById('notification-badge');
+            if (!list) return;
+
+            if (notifications.length === 0) {
+                list.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No notifications</div>`;
+                if (badge) badge.classList.add('hidden');
+                return;
+            }
+
+            list.innerHTML = notifications.map(n => `
+                <div class="notification-item ${n.read ? 'read' : 'unread'}"
+                     onclick="handleNotificationClick(${n.id})"
+                     style="cursor: pointer;">
+                    <div class="notification-dot"></div>
+                    <div class="notification-body">
+                        <div class="notification-title">${n.title}</div>
+                        <div style="color: var(--text-secondary); font-size: 12px; margin-top: 2px;">${n.body}</div>
+                        <div class="notification-meta">${n.time}</div>
+                    </div>
+                </div>
+            `).join('');
+
+            const unread = notifications.filter(n => !n.read).length;
+            if (badge) {
+                if (unread > 0) {
+                    badge.classList.remove('hidden');
+                    badge.textContent = unread > 9 ? '9+' : unread;
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+        }
+
+        function handleNotificationClick(id) {
+            const n = notifications.find(x => x.id === id);
+            if (!n) return;
+            n.read = true;
+            renderNotifications();
+            const dropdown = document.getElementById('notification-dropdown');
+            if (dropdown) dropdown.classList.remove('show');
+            if (n.alert) openInvestigation(n.alert);
+        }
+
+        function markAllNotificationsRead() {
+            notifications.forEach(n => n.read = true);
+            renderNotifications();
+        }
+
+        function pushNotification(title, body, alertId) {
+            notifications.unshift({
+                id: Date.now(),
+                title, body,
+                time: 'Just now',
+                read: false,
+                alert: alertId || null
+            });
+            if (notifications.length > 15) notifications.pop();
+            renderNotifications();
+        }
+
+        // ---------- INIT EXTENSIONS ----------
+        const _originalInitApp = initApp;
+        initApp = async function() {
+            await _originalInitApp();
+            initSearch();
+            initNotifications();
+        };
 
         // Initialize on load
         window.addEventListener('DOMContentLoaded', initApp);
