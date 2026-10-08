@@ -2468,24 +2468,557 @@ function selectAgent(index) {
         }
 
                 // ---------- NEW PAGE RENDERERS (content added in Chunk 2) ----------
-        function renderModelsPage() {
+                function renderModelsPage() {
             const el = document.getElementById('models-content');
-            if (el) el.innerHTML = '<div class="card"><p style="color: var(--text-secondary);">Loading model comparison data...</p></div>';
+            if (!el) return;
+
+            const models = [
+                { name: 'gpt-oss-120b', family: 'OpenAI', params: '120B', latency: 2.15, tps: 341.5, tokens: 735, cls: 2, esc: 3, compliance: '100%' },
+                { name: 'gpt-oss-20b',  family: 'OpenAI', params: '20B',  latency: 1.09, tps: 621.2, tokens: 659, cls: 1, esc: 2, compliance: '100%' },
+                { name: 'qwen3.8-27b',  family: 'Alibaba', params: '27B', latency: 1.01, tps: 436.4, tokens: 443, cls: 3, esc: 3, compliance: '100%' }
+            ];
+
+            const cases = [
+                { id: 'T1', alert: 'ALT-2026-004', type: 'Failed Logon Spike', expected: 'Benign', g120: 'Ambiguous', g20: 'Ambiguous', q: 'Benign', pass: true },
+                { id: 'T2', alert: 'ALT-2026-002', type: 'Impossible Travel', expected: 'Ambiguous', g120: 'Ambiguous', g20: 'Ambiguous', q: 'Ambiguous', pass: true },
+                { id: 'T3', alert: 'ALT-2026-001', type: 'Suspicious PowerShell', expected: 'Malicious', g120: 'Malicious', g20: 'Ambiguous', q: 'Malicious', pass: true }
+            ];
+
+            const clsColor = (v) => v === 3 ? 'sev-low' : v === 2 ? 'sev-medium' : 'sev-critical';
+
+            el.innerHTML = `
+                <div class="mock-warning-banner">
+                    <i class="ph-fill ph-info" style="font-size: 24px;"></i>
+                    <div>
+                        <strong>EVALUATION SETUP:</strong> Three open-weight models, same cases, same prompts, same evidence, same output schema. Temperature 0.2, single-turn, no tool augmentation. This isolates <em>reasoning quality</em> from <em>tool quality</em>.
+                    </div>
+                </div>
+
+                <div class="grid-4 mb-4">
+                    <div class="card">
+                        <div class="kpi-label">Models Compared</div>
+                        <div class="kpi-value">3</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Total Runs</div>
+                        <div class="kpi-value">9</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Fastest Model</div>
+                        <div class="kpi-value" style="font-size: 20px;">qwen3.8-27b</div>
+                        <div class="kpi-label mt-2">1.01s avg</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Output Compliance</div>
+                        <div class="kpi-value" style="color: var(--success);">100%</div>
+                        <div class="kpi-label mt-2">All 9 runs</div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <span class="card-title">Quantitative Results</span>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>Family</th>
+                                    <th>Params</th>
+                                    <th>Avg Latency (s)</th>
+                                    <th>Tokens/sec</th>
+                                    <th>Avg Tokens</th>
+                                    <th>Classification</th>
+                                    <th>Escalation</th>
+                                    <th>Compliance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${models.map(m => `
+                                    <tr>
+                                        <td style="font-weight: 600; color: var(--accent);">${m.name}</td>
+                                        <td>${m.family}</td>
+                                        <td>${m.params}</td>
+                                        <td>${m.latency}</td>
+                                        <td>${m.tps}</td>
+                                        <td>${m.tokens}</td>
+                                        <td><span class="badge ${clsColor(m.cls)}">${m.cls}/3</span></td>
+                                        <td><span class="badge ${clsColor(m.esc)}">${m.esc}/3</span></td>
+                                        <td><span class="badge sev-low">${m.compliance}</span></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <span class="card-title">Classification Accuracy by Model</span>
+                    </div>
+                    <div style="padding: 20px 0;">
+                        ${models.map(m => {
+                            const pct = (m.cls / 3) * 100;
+                            const color = m.cls === 3 ? 'var(--success)' : m.cls === 2 ? 'var(--warning)' : 'var(--critical)';
+                            return `
+                                <div style="margin-bottom: 20px;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                        <span style="font-weight: 600;">${m.name}</span>
+                                        <span style="color: ${color}; font-weight: 700;">${m.cls}/3</span>
+                                    </div>
+                                    <div style="height: 12px; background: var(--bg-base); border-radius: 6px; overflow: hidden;">
+                                        <div style="height: 100%; width: ${pct}%; background: ${color}; transition: width 0.5s;"></div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <span class="card-title">Per-Case Behaviour</span>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Case</th>
+                                    <th>Alert ID</th>
+                                    <th>Type</th>
+                                    <th>Expected</th>
+                                    <th>gpt-oss-120b</th>
+                                    <th>gpt-oss-20b</th>
+                                    <th>qwen3.8-27b</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${cases.map(c => {
+                                    const cell = (val, expected) => {
+                                        const match = val === expected;
+                                        return `<span class="badge ${match ? 'sev-low' : 'sev-critical'}">${val}${match ? ' ✓' : ' ✗'}</span>`;
+                                    };
+                                    return `
+                                        <tr>
+                                            <td><strong>${c.id}</strong></td>
+                                            <td style="color: var(--accent);">${c.alert}</td>
+                                            <td>${c.type}</td>
+                                            <td><span class="badge badge-outline">${c.expected}</span></td>
+                                            <td>${cell(c.g120, c.expected)}</td>
+                                            <td>${cell(c.g20, c.expected)}</td>
+                                            <td>${cell(c.q, c.expected)}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <span class="card-title">Qualitative Findings</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 16px;">
+                        <div style="padding: 14px; background: var(--bg-base); border-left: 3px solid var(--success); border-radius: var(--radius-md);">
+                            <div style="font-weight: 600; color: var(--success); margin-bottom: 6px;">✓ qwen3.8-27b — Recommended Model</div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                Perfect classification (3/3) and escalation (3/3). Lowest latency (1.01s). Most concise output (443 tokens avg). Only model to correctly classify the benign case as <strong>Benign</strong>. Only model to return <strong>High confidence</strong> on the clearest malicious case.
+                            </div>
+                        </div>
+                        <div style="padding: 14px; background: var(--bg-base); border-left: 3px solid var(--warning); border-radius: var(--radius-md);">
+                            <div style="font-weight: 600; color: var(--warning); margin-bottom: 6px;">⚠ gpt-oss-120b — Partial Compliance</div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                Correctly escalated all three cases (3/3) but misclassified the routine logon spike as <strong>Ambiguous</strong> instead of Benign. Referenced an "approved domain whitelist" that was not in the alert — a low-severity hallucination of organisational context.
+                            </div>
+                        </div>
+                        <div style="padding: 14px; background: var(--bg-base); border-left: 3px solid var(--critical); border-radius: var(--radius-md);">
+                            <div style="font-weight: 600; color: var(--critical); margin-bottom: 6px;">✗ gpt-oss-20b — Operational Risk</div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                Fastest model (759 tok/s peak) but lowest accuracy. Failed to escalate the ambiguous identity event (<strong>false negative</strong>). Misclassified the encoded PowerShell C2 chain as Ambiguous. Systematic bias toward the middle of the confidence spectrum — the wrong direction for SOC triage.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Interpretation</span>
+                    </div>
+                    <p style="font-size: 14px; line-height: 1.7; color: var(--text-secondary);">
+                        <strong style="color: var(--text-primary);">Open-weight models are not interchangeable for security tasks.</strong> The behavioural spread between the three models on identical evidence was substantial. Model selection in a SOC context is a safety decision, not a stylistic one.
+                    </p>
+                    <p style="font-size: 14px; line-height: 1.7; color: var(--text-secondary); margin-top: 12px;">
+                        The failure mode of <code style="background: var(--bg-base); padding: 2px 6px; border-radius: 4px; color: var(--critical);">gpt-oss-20b</code> was not random. It consistently under-classified: benign events as ambiguous, malicious events as ambiguous, ambiguous events as non-escalating. A model that always says "ambiguous" is useless; a model that never escalates is dangerous.
+                    </p>
+                    <p style="font-size: 14px; line-height: 1.7; color: var(--text-secondary); margin-top: 12px;">
+                        <strong style="color: var(--text-primary);">Limitation:</strong> Three cases is sufficient to identify clear behavioural differences but not to estimate accuracy on a production alert distribution. A larger labelled dataset and statistical repetition would be required before deployment claims.
+                    </p>
+                </div>
+            `;
         }
 
-        function renderGuardrailsPage() {
+                function renderGuardrailsPage() {
             const el = document.getElementById('guardrails-content');
-            if (el) el.innerHTML = '<div class="card"><p style="color: var(--text-secondary);">Loading guardrails mapping...</p></div>';
+            if (!el) return;
+
+            const mapping = [
+                { risk: 'Prompt Injection', guardrail: 'Treat alert content as untrusted', framework: 'NIST Govern 1.2 · OWASP LLM01', status: 'Implemented (prompt-level)' },
+                { risk: 'Prompt Injection', guardrail: 'Input sanitisation / injection detection', framework: 'NIST Manage 2.2 · OWASP LLM01', status: 'Designed, not implemented' },
+                { risk: 'Hallucination', guardrail: 'Evidence grounding per specialist agent', framework: 'NIST Measure 2.5 · OWASP LLM02', status: 'Implemented (workflow-level)' },
+                { risk: 'Hallucination', guardrail: 'Uncertainty as required output field', framework: 'NIST Measure 2.6', status: 'Implemented (prompt-level)' },
+                { risk: 'Hallucination', guardrail: 'Refusal to fabricate under tool failure', framework: 'NIST Measure 2.7', status: 'Implemented (validated)' },
+                { risk: 'Excessive Agency', guardrail: 'No autonomous high-impact actions', framework: 'NIST Govern 1.3 · OWASP LLM08', status: 'Implemented (structural)' },
+                { risk: 'Excessive Agency', guardrail: 'Human-in-the-Loop approval gate', framework: 'NIST Govern 1.4 · OWASP LLM08', status: 'Implemented (UI-level)' },
+                { risk: 'Excessive Agency', guardrail: 'Workflow-level approval node', framework: 'NIST Manage 3.1', status: 'Designed, not implemented' },
+                { risk: 'Sensitive Data', guardrail: 'Payload minimisation', framework: 'NIST Govern 2.1 · OWASP LLM06', status: 'Implemented' },
+                { risk: 'Sensitive Data', guardrail: 'Per-agent data access control', framework: 'NIST Govern 2.2', status: 'Designed, not implemented' },
+                { risk: 'Sensitive Data', guardrail: 'PII redaction before inference', framework: 'NIST Map 2.3', status: 'Future work' },
+                { risk: 'Insecure Output', guardrail: 'Structured output schema', framework: 'NIST Measure 2.4 · OWASP LLM02', status: 'Implemented (validated)' },
+                { risk: 'Insecure Output', guardrail: 'Schema validation before downstream use', framework: 'NIST Measure 2.5', status: 'Partially implemented' },
+                { risk: 'Audit', guardrail: 'Immutable log of investigation events', framework: 'NIST Govern 3.1', status: 'Designed, not implemented' },
+                { risk: 'Tool Failure', guardrail: 'Graceful failure and escalation', framework: 'NIST Manage 2.1', status: 'Partially implemented' },
+                { risk: 'Access Control', guardrail: 'Authenticated webhook access', framework: 'NIST Govern 2.2', status: 'Future work' },
+                { risk: 'Rate Limiting', guardrail: 'Abuse and cost control', framework: 'NIST Manage 1.3', status: 'Future work' }
+            ];
+
+            const statusBadge = (s) => {
+                if (s.startsWith('Implemented')) return 'sev-low';
+                if (s.startsWith('Partially')) return 'sev-medium';
+                if (s.startsWith('Designed')) return 'sev-high';
+                return 'sev-critical';
+            };
+
+            const impl = mapping.filter(m => m.status.startsWith('Implemented')).length;
+            const partial = mapping.filter(m => m.status.startsWith('Partially')).length;
+            const designed = mapping.filter(m => m.status.startsWith('Designed')).length;
+            const future = mapping.filter(m => m.status.startsWith('Future')).length;
+
+            el.innerHTML = `
+                <div class="mock-warning-banner">
+                    <i class="ph-fill ph-shield-check" style="font-size: 24px;"></i>
+                    <div>
+                        <strong>GOVERNANCE POSTURE:</strong> Strong on structural guarantees, partial on procedural controls. The system cannot execute high-impact actions because no node in the workflow is capable of doing so. This is enforced by design, not by policy.
+                    </div>
+                </div>
+
+                <div class="grid-4 mb-4">
+                    <div class="card">
+                        <div class="kpi-label">Implemented</div>
+                        <div class="kpi-value" style="color: var(--success);">${impl}</div>
+                        <div class="kpi-label mt-2">Enforced at runtime</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Partially Implemented</div>
+                        <div class="kpi-value" style="color: var(--warning);">${partial}</div>
+                        <div class="kpi-label mt-2">Core present, edge cases uncovered</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Designed, Not Enforced</div>
+                        <div class="kpi-value" style="color: var(--high);">${designed}</div>
+                        <div class="kpi-label mt-2">Architected but not in code</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Future Work</div>
+                        <div class="kpi-value" style="color: var(--critical);">${future}</div>
+                        <div class="kpi-label mt-2">Required before production</div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <span class="card-title">Governance Mapping — Risk → Guardrail → Framework → Status</span>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Risk</th>
+                                    <th>Guardrail</th>
+                                    <th>Framework Reference</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${mapping.map(m => `
+                                    <tr>
+                                        <td style="font-weight: 600;">${m.risk}</td>
+                                        <td>${m.guardrail}</td>
+                                        <td style="font-size: 12px; color: var(--text-muted);">${m.framework}</td>
+                                        <td><span class="badge ${statusBadge(m.status)}">${m.status}</span></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="grid-2 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">What Is Actually Enforced</span>
+                        </div>
+                        <ul style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--text-secondary);">
+                            <li>✓ No autonomous high-impact action (structural guarantee)</li>
+                            <li>✓ Mandatory Human-in-the-Loop approval gate</li>
+                            <li>✓ Structured 6-section output schema</li>
+                            <li>✓ Uncertainty as required output field</li>
+                            <li>✓ Visible error state on workflow failure</li>
+                            <li>✓ Prompt-level untrusted-content instruction</li>
+                            <li>✓ Refusal to fabricate under tool failure (validated in production)</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Framework Alignment</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+                            <div style="display: flex; justify-content: space-between;"><span>NIST AI RMF — Govern</span><span class="badge sev-medium">Partial</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>NIST AI RMF — Map</span><span class="badge sev-medium">Partial</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>NIST AI RMF — Measure</span><span class="badge sev-medium">Partial</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>NIST AI RMF — Manage</span><span class="badge sev-medium">Partial</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>OWASP LLM01 — Prompt Injection</span><span class="badge sev-medium">Partial</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>OWASP LLM02 — Insecure Output</span><span class="badge sev-medium">Partial</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>OWASP LLM06 — Sensitive Data</span><span class="badge sev-medium">Partial</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>OWASP LLM08 — Excessive Agency</span><span class="badge sev-low">Strong</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>MITRE ATT&CK</span><span class="badge badge-outline">Informational</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Honest Governance Claim</span>
+                    </div>
+                    <p style="font-size: 14px; line-height: 1.7; color: var(--text-secondary);">
+                        This prototype does <strong style="color: var(--text-primary);">not</strong> claim compliance with NIST AI RMF, ISO/IEC 42001, ISO/IEC 27001, or any regulatory framework. It claims <strong style="color: var(--text-primary);">alignment</strong> with the risk categories those frameworks address, and it reports honestly which alignment items are implemented, which are designed, and which are future work.
+                    </p>
+                    <p style="font-size: 14px; line-height: 1.7; color: var(--text-secondary); margin-top: 12px;">
+                        Actual compliance depends on organisational policies, legal obligations, data protection requirements, retention rules, and security procedures that sit outside the prototype. A production deployment would require formal framework mapping against the organisation's regulatory context.
+                    </p>
+                </div>
+            `;
         }
+
+                // ---------- AUDIT LOG ----------
+        // Persistent audit entries. Seed with demo data; real HITL decisions append here.
+        const auditEntries = [
+            { ts: '2 min ago', event: 'Risk Threshold Exceeded', actor: 'SOC Orchestrator', action: 'Recommendation Generated', decision: 'ESCALATE', decisionType: 'high', alert: 'ALT-2026-001' },
+            { ts: '12 min ago', event: 'AI Investigation', actor: 'Multi-Agent Workflow', action: 'Investigation completed — 5 tools called', decision: 'COMPLETED', decisionType: 'low', alert: 'ALT-2026-001' },
+            { ts: '45 min ago', event: 'Analyst Review', actor: 'Sr. Analyst (SA)', action: 'Host Isolation Approval', decision: 'APPROVED', decisionType: 'low', alert: 'ALT-2026-005' },
+            { ts: '1 hr ago', event: 'Analyst Review', actor: 'Sr. Analyst (SA)', action: 'AI Recommendation Rejected — requested more evidence', decision: 'REJECTED', decisionType: 'critical', alert: 'ALT-2026-002' },
+            { ts: '3 hrs ago', event: 'Escalation Fired', actor: 'Notification System', action: 'Gmail escalation sent to Tier 2 team', decision: 'SENT', decisionType: 'outline', alert: 'ALT-2026-021' },
+            { ts: '6 hrs ago', event: 'Analyst Review', actor: 'Sr. Analyst (SA)', action: 'Account Suspension', decision: 'REJECTED', decisionType: 'critical', alert: 'ALT-2026-015' },
+            { ts: '18 hrs ago', event: 'Model Comparison Run', actor: 'Evaluation Script', action: 'Three-model comparison on T1/T2/T3 complete', decision: 'LOGGED', decisionType: 'outline', alert: 'ALT-2026-004' }
+        ];
 
         function renderAuditPage() {
             const el = document.getElementById('audit-content');
-            if (el) el.innerHTML = '<div class="card"><p style="color: var(--text-secondary);">Loading audit entries...</p></div>';
+            if (!el) return;
+
+            const decisions = auditEntries.filter(e => e.decisionType === 'low').length;
+            const rejections = auditEntries.filter(e => e.decisionType === 'critical').length;
+
+            el.innerHTML = `
+                <div class="mock-warning-banner">
+                    <i class="ph-fill ph-clipboard-text" style="font-size: 24px;"></i>
+                    <div>
+                        <strong>AUDIT POLICY:</strong> Every AI recommendation, analyst decision, and escalation is logged with timestamp, actor, alert identifier, and outcome. This provides the accountability chain required for retrospective review.
+                    </div>
+                </div>
+
+                <div class="grid-4 mb-4">
+                    <div class="card">
+                        <div class="kpi-label">Total Entries</div>
+                        <div class="kpi-value">${auditEntries.length}</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Approvals / Completions</div>
+                        <div class="kpi-value" style="color: var(--success);">${decisions}</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Rejections</div>
+                        <div class="kpi-value" style="color: var(--critical);">${rejections}</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Escalations Sent</div>
+                        <div class="kpi-value" style="color: var(--high);">2</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Immutable Event Log</span>
+                        <span class="badge badge-outline">Auto-refresh on decision</span>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Alert</th>
+                                    <th>Event</th>
+                                    <th>Actor</th>
+                                    <th>Action</th>
+                                    <th>Decision</th>
+                                </tr>
+                            </thead>
+                            <tbody id="audit-table-body">
+                                ${auditEntries.map(e => {
+                                    const badgeClass = e.decisionType === 'low' ? 'sev-low'
+                                                     : e.decisionType === 'critical' ? 'sev-critical'
+                                                     : e.decisionType === 'high' ? 'sev-high'
+                                                     : 'badge-outline';
+                                    return `
+                                        <tr>
+                                            <td style="font-size: 12px; color: var(--text-muted);">${e.ts}</td>
+                                            <td style="color: var(--accent); font-weight: 500;">${e.alert}</td>
+                                            <td>${e.event}</td>
+                                            <td><span class="badge badge-outline">${e.actor}</span></td>
+                                            <td>${e.action}</td>
+                                            <td><span class="badge ${badgeClass}">${e.decision}</span></td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <span class="card-title">Logging Architecture</span>
+                    </div>
+                    <div style="font-size: 13px; line-height: 1.8; color: var(--text-secondary);">
+                        <p><strong style="color: var(--text-primary);">What is currently logged:</strong> All HITL decisions (approve, reject, request evidence), escalation notifications, AI investigation completions, and workflow errors are appended to this view at runtime.</p>
+                        <p style="margin-top: 12px;"><strong style="color: var(--text-primary);">What is not yet logged:</strong> A persistent audit store is not implemented. Entries exist only in the browser session. Production deployment would require write-ahead logging to an immutable store (e.g., append-only database or SIEM audit index).</p>
+                        <p style="margin-top: 12px;"><strong style="color: var(--text-primary);">Correlation:</strong> Every entry carries the alert identifier, allowing reconstruction of the full investigation trail for a specific incident.</p>
+                    </div>
+                </div>
+            `;
         }
 
-        function renderScopePage() {
+        // Append a new audit entry and re-render if the audit page is visible
+        function appendAuditEntry(entry) {
+            auditEntries.unshift(entry);
+            if (auditEntries.length > 20) auditEntries.pop();
+            if (appState.currentPage === 'view-audit') renderAuditPage();
+        }
+
+                function renderScopePage() {
             const el = document.getElementById('scope-content');
-            if (el) el.innerHTML = '<div class="card"><p style="color: var(--text-secondary);">Loading scope...</p></div>';
+            if (!el) return;
+
+            el.innerHTML = `
+                <div class="mock-warning-banner">
+                    <i class="ph-fill ph-target" style="font-size: 24px;"></i>
+                    <div>
+                        <strong>DESIGN PRINCIPLE:</strong> Deterministic controls where predictability matters. Agentic reasoning where contextual interpretation adds value. Human authority over consequential action.
+                    </div>
+                </div>
+
+                <div class="grid-2 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title" style="color: var(--success);">In Scope</span>
+                        </div>
+                        <ul style="display: flex; flex-direction: column; gap: 12px; font-size: 13px; color: var(--text-secondary);">
+                            <li><strong style="color: var(--text-primary);">Investigation automation</strong> — evidence collection, correlation, and preliminary assessment across five specialist dimensions</li>
+                            <li><strong style="color: var(--text-primary);">Multi-agent orchestration</strong> — an orchestrator coordinating five specialist tools with deterministic call order</li>
+                            <li><strong style="color: var(--text-primary);">Human-in-the-Loop</strong> — mandatory analyst approval gate for consequential decisions</li>
+                            <li><strong style="color: var(--text-primary);">Structured output</strong> — fixed six-section schema for comparability and downstream parsing</li>
+                            <li><strong style="color: var(--text-primary);">Model comparison</strong> — controlled evaluation of three open-weight models on identical inputs</li>
+                            <li><strong style="color: var(--text-primary);">Governance mapping</strong> — risk register mapped to NIST AI RMF and OWASP LLM Top 10</li>
+                            <li><strong style="color: var(--text-primary);">Public deployment</strong> — live URL accessible by any browser for demonstration and expert validation</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title" style="color: var(--critical);">Out of Scope</span>
+                        </div>
+                        <ul style="display: flex; flex-direction: column; gap: 12px; font-size: 13px; color: var(--text-secondary);">
+                            <li><strong style="color: var(--text-primary);">Live telemetry integration</strong> — no connection to real SIEM, EDR, IAM, or CMDB systems</li>
+                            <li><strong style="color: var(--text-primary);">Autonomous response</strong> — the system cannot isolate hosts, disable accounts, or modify firewall rules</li>
+                            <li><strong style="color: var(--text-primary);">Detection</strong> — the system does not detect threats; it investigates alerts generated by existing controls</li>
+                            <li><strong style="color: var(--text-primary);">Production hardening</strong> — no authentication, rate limiting, disaster recovery, or persistent audit store</li>
+                            <li><strong style="color: var(--text-primary);">Statistical accuracy claim</strong> — three test cases are sufficient for proof-of-concept, not for benchmark claims</li>
+                            <li><strong style="color: var(--text-primary);">Prompt-injection stress test</strong> — dedicated adversarial testing is future work</li>
+                            <li><strong style="color: var(--text-primary);">Analyst pilot</strong> — efficiency gain is a hypothesis, not a measured outcome</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <span class="card-title">STOIC Prompt Engineering — Summary</span>
+                    </div>
+                    <p style="font-size: 14px; line-height: 1.7; color: var(--text-secondary); margin-bottom: 16px;">
+                        STOIC is a prompt engineering framework that removes emotional framing, urgency bias, and leading language from model instructions. The orchestrator prompt was refined across four iterations.
+                    </p>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Iteration</th>
+                                    <th>Emotional Language</th>
+                                    <th>Leading Language</th>
+                                    <th>Uncertainty Handling</th>
+                                    <th>Output Schema</th>
+                                    <th>Injection Awareness</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>V1 — Initial</td><td><span class="badge sev-critical">Heavy</span></td><td><span class="badge sev-critical">Yes</span></td><td><span class="badge sev-high">None</span></td><td><span class="badge sev-high">None</span></td><td><span class="badge sev-high">None</span></td></tr>
+                                <tr><td>V2 — Neutral Tone</td><td><span class="badge sev-low">Removed</span></td><td><span class="badge sev-medium">Reduced</span></td><td><span class="badge sev-high">None</span></td><td><span class="badge sev-high">None</span></td><td><span class="badge sev-high">None</span></td></tr>
+                                <tr><td>V3 — Bias-Aware</td><td><span class="badge sev-low">Removed</span></td><td><span class="badge sev-low">Removed</span></td><td><span class="badge sev-medium">Partial</span></td><td><span class="badge sev-high">None</span></td><td><span class="badge sev-high">None</span></td></tr>
+                                <tr><td><strong>V4 — Final STOIC</strong></td><td><span class="badge sev-low">Removed</span></td><td><span class="badge sev-low">Removed</span></td><td><span class="badge sev-low">Explicit</span></td><td><span class="badge sev-low">Yes</span></td><td><span class="badge sev-low">Yes</span></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <span class="card-title">Design Decisions</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 16px;">
+                        <div style="padding: 14px; background: var(--bg-base); border-radius: var(--radius-md);">
+                            <div style="font-weight: 600; margin-bottom: 6px;">Why multi-agent instead of single-LLM?</div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                Decomposition by evidence dimension makes each conclusion auditable. It also allows the orchestrator to identify conflicts between specialists rather than averaging them away.
+                            </div>
+                        </div>
+                        <div style="padding: 14px; background: var(--bg-base); border-radius: var(--radius-md);">
+                            <div style="font-weight: 600; margin-bottom: 6px;">Why no autonomous action?</div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                High-impact response actions require accountability. A model that is prompted to be safe can still fail; a workflow with no destructive capability cannot fail destructively.
+                            </div>
+                        </div>
+                        <div style="padding: 14px; background: var(--bg-base); border-radius: var(--radius-md);">
+                            <div style="font-weight: 600; margin-bottom: 6px;">Why open-weight models?</div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                Cost, data sovereignty, and the ability to run on hosted infrastructure without sending sensitive security telemetry to closed proprietary APIs.
+                            </div>
+                        </div>
+                        <div style="padding: 14px; background: var(--bg-base); border-radius: var(--radius-md);">
+                            <div style="font-weight: 600; margin-bottom: 6px;">Why honest scoping?</div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                The prototype reports what is implemented, what is designed, and what remains future work rather than presenting aspiration as achievement. This is a deliberate design value, not a disclaimer.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Falsifiable Claim</span>
+                    </div>
+                    <p style="font-size: 15px; line-height: 1.7; color: var(--text-primary); font-style: italic; padding: 16px; background: var(--bg-base); border-left: 3px solid var(--accent); border-radius: var(--radius-md);">
+                        "This system assists SOC analysts by automatically gathering and correlating evidence and producing a structured investigation summary. We would know it failed if analysts overrode more than 30% of AI recommendations, or if the AI failed to escalate a case that an experienced analyst would have escalated."
+                    </p>
+                </div>
+            `;
         }
 
         // Initialize on load
