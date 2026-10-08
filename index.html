@@ -2549,98 +2549,194 @@ function selectAgent(index) {
     document.getElementById('selected-agent-count').innerText =
         agent.name;
 
-    details.innerHTML = `
-        <div style="
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 20px;
-        ">
+       // Per-agent enriched metadata
+    const agentMeta = {
+        'Threat Intelligence Agent': {
+            purpose: 'Assesses the reputation and known intelligence of IP addresses, domains, hashes, and URLs found in an alert.',
+            evidence: 'Indicator data from the alert payload',
+            production: 'Approved TI feeds (VirusTotal, AlienVault OTX, MISP)',
+            successRate: 94,
+            avgLatency: '1.2s',
+            tasksToday: 18,
+            humanRule: 'Human review when evidence is inconclusive',
+            recent: [
+                { time: '2 min ago', text: 'Enriched ALT-2026-001 — external IP flagged as suspicious' },
+                { time: '18 min ago', text: 'Enriched ALT-2026-002 — no reputation match for login domain' },
+                { time: '1 hr ago', text: 'Enriched ALT-2026-005 — ransomware hash not found in TI feeds' }
+            ]
+        },
+        'Endpoint Agent': {
+            purpose: 'Extracts process lineage, command-line arguments, and endpoint behaviour from alert context.',
+            evidence: 'Process and endpoint metadata',
+            production: 'EDR telemetry (CrowdStrike, Defender, SentinelOne)',
+            successRate: 91,
+            avgLatency: '1.4s',
+            tasksToday: 12,
+            humanRule: 'Human review when process tree is incomplete',
+            recent: [
+                { time: 'Just now', text: 'Extracting process tree for ALT-2026-001' },
+                { time: '22 min ago', text: 'Analysed PowerShell execution chain on FIN-WS-042' },
+                { time: '2 hrs ago', text: 'Identified unsigned binary in Downloads folder on FIN-WS-050' }
+            ]
+        },
+        'Identity Agent': {
+            purpose: 'Assesses user role, privilege level, employment status, and whether activity matches expected behaviour.',
+            evidence: 'Account and authentication context',
+            production: 'IAM platform and directory services',
+            successRate: 88,
+            avgLatency: '0.9s',
+            tasksToday: 22,
+            humanRule: 'Escalates privileged identity conflicts',
+            recent: [
+                { time: '15 min ago', text: 'Verified account status for j.doe — active, standard user' },
+                { time: '45 min ago', text: 'Flagged e.wilson — terminated employee, active account' },
+                { time: '3 hrs ago', text: 'Detected impossible travel for a.smith' }
+            ]
+        },
+        'Network Context Agent': {
+            purpose: 'Analyses source and destination addresses, ports, protocol, and whether the traffic pattern is typical.',
+            evidence: 'Network metadata from the alert',
+            production: 'Firewall, proxy, and NetFlow telemetry',
+            successRate: 85,
+            avgLatency: '1.1s',
+            tasksToday: 15,
+            humanRule: 'Reviews unusual or high-impact communication',
+            recent: [
+                { time: '4 min ago', text: 'Analyzed outbound HTTPS to 203.0.113.45 — flagged as unrecognised external' },
+                { time: '40 min ago', text: 'Verified internal LDAP traffic from DC-01' },
+                { time: '2 hrs ago', text: 'Detected beacon-like pattern to cdn-sync.example-cloud.io' }
+            ]
+        },
+        'Correlation & Risk Agent': {
+            purpose: 'Correlates findings across specialist agents and produces a consolidated risk score with priority recommendation.',
+            evidence: 'Outputs from all specialist agents',
+            production: 'Orchestrator reasoning over agent findings',
+            successRate: 94,
+            avgLatency: '2.1s',
+            tasksToday: 8,
+            humanRule: 'Human required for high-risk or uncertain decisions',
+            recent: [
+                { time: 'Just now', text: 'Calculated risk score 94/100 for ALT-2026-001' },
+                { time: '12 min ago', text: 'Correlated encoded PowerShell + external C2 + finance asset' },
+                { time: '55 min ago', text: 'Escalated ambiguous identity event to human review' }
+            ]
+        }
+    };
 
+    const meta = agentMeta[agent.name] || {
+        purpose: 'Specialist agent participating in SOC investigation.',
+        evidence: 'Assigned evidence domain',
+        production: 'Production integration pending',
+        successRate: 85,
+        avgLatency: '1.0s',
+        tasksToday: 0,
+        humanRule: 'Reviews conflicting or missing evidence',
+        recent: []
+    };
+
+    const statusClass = agent.status === 'RUNNING' ? 'sev-medium' : 'sev-low';
+
+    details.innerHTML = `
+        <!-- Header -->
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
             <div style="
-                width: 44px;
-                height: 44px;
-                border-radius: 8px;
-                background: var(--accent-bg);
-                border: 1px solid var(--accent);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--accent);
-                font-size: 22px;
-            ">
+                width: 44px; height: 44px; border-radius: 8px;
+                background: var(--accent-bg); border: 1px solid var(--accent);
+                display: flex; align-items: center; justify-content: center;
+                color: var(--accent); font-size: 22px;">
                 <i class="ph ${agent.icon}"></i>
             </div>
-
             <div>
-                <div style="
-                    font-size: 16px;
-                    font-weight: 600;
-                    margin-bottom: 4px;
-                ">
+                <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">
                     ${agent.name}
                 </div>
-
-                <span class="badge ${
-                    agent.status === 'RUNNING'
-                        ? 'sev-medium'
-                        : 'sev-low'
-                }">
-                    ${agent.status}
-                </span>
+                <span class="badge ${statusClass}">${agent.status}</span>
             </div>
-
         </div>
 
+        <!-- Purpose -->
         <div style="
-            padding: 14px;
-            background: var(--bg-base);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            margin-bottom: 16px;
-        ">
+            padding: 12px 14px; background: var(--bg-base);
+            border-left: 3px solid var(--accent); border-radius: var(--radius-md);
+            margin-bottom: 16px; font-size: 12px; line-height: 1.6;
+            color: var(--text-secondary);">
+            ${meta.purpose}
+        </div>
 
-            <div class="kpi-label">
-                Current Task
+        <!-- Metric Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;">
+            <div style="padding: 10px 12px; background: var(--bg-base); border-radius: var(--radius-md);">
+                <div class="kpi-label" style="font-size: 11px;">Success Rate</div>
+                <div style="font-weight: 700; color: var(--success); font-size: 16px; margin-top: 4px;">${meta.successRate}%</div>
             </div>
+            <div style="padding: 10px 12px; background: var(--bg-base); border-radius: var(--radius-md);">
+                <div class="kpi-label" style="font-size: 11px;">Avg Latency</div>
+                <div style="font-weight: 700; color: var(--accent); font-size: 16px; margin-top: 4px;">${meta.avgLatency}</div>
+            </div>
+            <div style="padding: 10px 12px; background: var(--bg-base); border-radius: var(--radius-md);">
+                <div class="kpi-label" style="font-size: 11px;">Tasks Today</div>
+                <div style="font-weight: 700; font-size: 16px; margin-top: 4px;">${meta.tasksToday}</div>
+            </div>
+            <div style="padding: 10px 12px; background: var(--bg-base); border-radius: var(--radius-md);">
+                <div class="kpi-label" style="font-size: 11px;">Confidence</div>
+                <div style="font-weight: 700; color: var(--success); font-size: 16px; margin-top: 4px;">${agent.conf}</div>
+            </div>
+        </div>
 
-            <div style="
-                margin-top: 6px;
-                font-weight: 500;
-            ">
+        <!-- Current Task -->
+        <div style="
+            padding: 12px 14px; background: var(--bg-base);
+            border: 1px solid var(--border); border-radius: var(--radius-md);
+            margin-bottom: 16px;">
+            <div class="kpi-label">Current Task</div>
+            <div style="margin-top: 6px; font-weight: 500; font-size: 13px;">
                 ${agent.task}
             </div>
-
         </div>
 
-        <div style="display:flex; flex-direction:column; gap:14px;">
-
-            <div style="
-                display:flex;
-                justify-content:space-between;
-            ">
-                <span class="kpi-label">Last Run</span>
-                <span>${agent.lastRun}</span>
+        <!-- Tools & Data -->
+        <div style="margin-bottom: 16px;">
+            <div class="kpi-label" style="margin-bottom: 8px;">Tools & Data</div>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+                <div style="display: flex; justify-content: space-between; padding: 8px 10px; background: var(--bg-base); border-radius: var(--radius-md);">
+                    <span style="color: var(--text-secondary);">Input</span>
+                    <span style="text-align: right; max-width: 60%;">${meta.evidence}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 8px 10px; background: var(--bg-base); border-radius: var(--radius-md);">
+                    <span style="color: var(--text-secondary);">Production target</span>
+                    <span style="text-align: right; max-width: 60%; font-size: 11px;">${meta.production}</span>
+                </div>
             </div>
+        </div>
 
-            <div style="
-                display:flex;
-                justify-content:space-between;
-            ">
-                <span class="kpi-label">Average Confidence</span>
-                <strong style="color:var(--success);">
-                    ${agent.conf}
-                </strong>
+        <!-- Human Intervention Rule -->
+        <div style="
+            padding: 12px 14px; background: rgba(245, 158, 11, 0.08);
+            border: 1px solid var(--warning); border-radius: var(--radius-md);
+            margin-bottom: 16px; font-size: 12px;">
+            <div style="color: var(--warning); font-weight: 600; margin-bottom: 4px;">
+                <i class="ph-fill ph-warning-circle"></i> Human Intervention Rule
             </div>
+            <div style="color: var(--text-secondary);">${meta.humanRule}</div>
+        </div>
 
-            <div style="
-                display:flex;
-                justify-content:space-between;
-            ">
-                <span class="kpi-label">State</span>
-                <span>${agent.status}</span>
+        <!-- Recent Activity -->
+        <div>
+            <div class="kpi-label" style="margin-bottom: 10px;">Recent Activity</div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                ${meta.recent.map(r => `
+                    <div style="
+                        padding: 10px 12px; background: var(--bg-base);
+                        border-radius: var(--radius-md); font-size: 12px;
+                        display: flex; gap: 10px; align-items: flex-start;">
+                        <i class="ph ph-check-circle" style="color: var(--success); font-size: 14px; margin-top: 1px;"></i>
+                        <div style="flex: 1;">
+                            <div style="color: var(--text-primary); line-height: 1.5;">${r.text}</div>
+                            <div style="color: var(--text-muted); font-size: 11px; margin-top: 3px;">${r.time}</div>
+                        </div>
+                    </div>
+                `).join('')}
             </div>
-
         </div>
     `;
 }
