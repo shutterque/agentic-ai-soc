@@ -1521,16 +1521,17 @@ min-width: 0;
                     <div id="scope-content"></div>
                 </div>
 
-                <div id="view-settings" class="view">
+                              <div id="view-settings" class="view">
                     <div class="page-header">
                         <div>
                             <h2 class="page-title">Platform Settings</h2>
-                            <p class="page-subtitle">Configuration for agents, risk thresholds, and integrations.</p>
+                            <p class="page-subtitle">Configuration for agents, risk thresholds, integrations, and preferences.</p>
                         </div>
+                        <button class="btn btn-primary" onclick="saveSettings()">
+                            <i class="ph ph-check"></i> Save Settings
+                        </button>
                     </div>
-                    <div class="card">
-                        <p style="color: var(--text-secondary);">Settings module is not available in the current UI prototype.</p>
-                    </div>
+                    <div id="settings-content"></div>
                 </div>
             </div>
         </main>
@@ -1637,8 +1638,9 @@ min-width: 0;
             if (viewId === 'view-guardrails') renderGuardrailsPage();
             if (viewId === 'view-audit') renderAuditPage();
             if (viewId === 'view-scope') renderScopePage();
-            if (viewId === 'view-evidence') renderEvidencePage();
+                     if (viewId === 'view-evidence') renderEvidencePage();
             if (viewId === 'view-governance') renderGovernancePage();
+            if (viewId === 'view-settings') renderSettingsPage();
         }
 
         function renderDashboard() {
@@ -3814,9 +3816,10 @@ function selectAgent(index) {
         }
 
         // ---------- INIT EXTENSIONS ----------
-                const _originalInitApp = initApp;
+                       const _originalInitApp = initApp;
         initApp = async function() {
             await _originalInitApp();
+            loadSettings();
             initSearch();
             initNotifications();
             initTheme();
@@ -3911,6 +3914,248 @@ function selectAgent(index) {
                 if (icon) icon.className = isLight ? 'ph ph-sun' : 'ph ph-moon';
                 localStorage.setItem('soc-theme', isLight ? 'light' : 'dark');
             });
+        }
+
+                // ---------- SETTINGS PAGE ----------
+        const settingsState = {
+            orchestratorModel: 'qwen/qwen3.8-27b',
+            specialistModel: 'openai/gpt-oss-20b',
+            riskThresholdEscalate: 70,
+            riskThresholdCritical: 90,
+            autoEscalate: true,
+            notificationsEmail: true,
+            notificationsInApp: true,
+            hitlMandatory: true,
+            dataRetentionDays: 30,
+            webhookUrl: N8N_WEBHOOK_URL,
+            environment: 'production',
+            orgName: 'Symbiosis Centre for Information Technology'
+        };
+
+        // Load saved settings from localStorage on init
+        function loadSettings() {
+            try {
+                const saved = localStorage.getItem('soc-settings');
+                if (saved) Object.assign(settingsState, JSON.parse(saved));
+            } catch (e) { /* ignore */ }
+        }
+
+        function saveSettings() {
+            try {
+                // Capture current UI values back into state
+                const el = (id) => document.getElementById(id);
+
+                settingsState.riskThresholdEscalate = parseInt(el('set-risk-escalate')?.value || 70);
+                settingsState.riskThresholdCritical = parseInt(el('set-risk-critical')?.value || 90);
+                settingsState.autoEscalate = el('set-auto-escalate')?.checked || false;
+                settingsState.notificationsEmail = el('set-notif-email')?.checked || false;
+                settingsState.notificationsInApp = el('set-notif-inapp')?.checked || false;
+                settingsState.hitlMandatory = el('set-hitl-mandatory')?.checked || false;
+                settingsState.dataRetentionDays = parseInt(el('set-retention')?.value || 30);
+
+                localStorage.setItem('soc-settings', JSON.stringify(settingsState));
+                showToast('success', 'Settings Saved', 'Configuration updated. Changes take effect on next investigation.');
+            } catch (e) {
+                showToast('error', 'Save Failed', 'Could not save settings. Check the console.');
+                console.error(e);
+            }
+        }
+
+        function renderSettingsPage() {
+            const el = document.getElementById('settings-content');
+            if (!el) return;
+
+            el.innerHTML = `
+                <div class="mock-warning-banner">
+                    <i class="ph-fill ph-info" style="font-size: 24px;"></i>
+                    <div>
+                        <strong>NOTE:</strong> Model selection, thresholds, and notification preferences shown here are persisted to your browser session. In a production deployment, these would be enforced at the orchestration layer.
+                    </div>
+                </div>
+
+                <div class="grid-2 mb-4">
+                    <!-- Model Configuration -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Model Configuration</span>
+                            <span class="badge sev-low">CONNECTED</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 14px;">
+                            <div>
+                                <div class="kpi-label">Orchestrator Model</div>
+                                <input type="text" class="input-field" id="set-orch-model" value="${settingsState.orchestratorModel}" readonly style="width: 100%; margin-top: 6px; padding: 8px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-family: inherit; font-size: 13px;">
+                            </div>
+                            <div>
+                                <div class="kpi-label">Specialist Model</div>
+                                <input type="text" class="input-field" id="set-spec-model" value="${settingsState.specialistModel}" readonly style="width: 100%; margin-top: 6px; padding: 8px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-family: inherit; font-size: 13px;">
+                            </div>
+                            <div>
+                                <div class="kpi-label">Inference Provider</div>
+                                <div style="margin-top: 6px; font-weight: 500; font-size: 13px;">Groq API <span style="color: var(--text-muted);">· OpenAI-compatible</span></div>
+                            </div>
+                            <div>
+                                <div class="kpi-label">Provider Credential</div>
+                                <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+                                    <span class="badge sev-low">ACTIVE</span>
+                                    <span style="font-size: 12px; color: var(--text-secondary);">gsk_…51Q8 (masked)</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Risk Thresholds -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Risk Thresholds</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 14px;">
+                            <div>
+                                <div class="kpi-label">Escalation Threshold (0–100)</div>
+                                <input type="number" id="set-risk-escalate" min="0" max="100" value="${settingsState.riskThresholdEscalate}" style="width: 100%; margin-top: 6px; padding: 8px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-family: inherit; font-size: 13px;">
+                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Alerts with risk score above this value require human review.</div>
+                            </div>
+                            <div>
+                                <div class="kpi-label">Critical Threshold (0–100)</div>
+                                <input type="number" id="set-risk-critical" min="0" max="100" value="${settingsState.riskThresholdCritical}" style="width: 100%; margin-top: 6px; padding: 8px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-family: inherit; font-size: 13px;">
+                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Alerts above this value trigger immediate escalation.</div>
+                            </div>
+                            <div>
+                                <div class="kpi-label">Data Retention (days)</div>
+                                <input type="number" id="set-retention" min="1" max="365" value="${settingsState.dataRetentionDays}" style="width: 100%; margin-top: 6px; padding: 8px 10px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-family: inherit; font-size: 13px;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid-2 mb-4">
+                    <!-- Governance Controls -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Governance Controls</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 14px;">
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                                <div>
+                                    <div style="font-weight: 500; font-size: 13px;">Mandatory Human-in-the-Loop approval</div>
+                                    <div style="font-size: 11px; color: var(--text-muted);">Consequential actions require explicit analyst authorisation</div>
+                                </div>
+                                <input type="checkbox" id="set-hitl-mandatory" ${settingsState.hitlMandatory ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--accent);">
+                            </label>
+
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                                <div>
+                                    <div style="font-weight: 500; font-size: 13px;">Auto-escalate on high-risk classification</div>
+                                    <div style="font-size: 11px; color: var(--text-muted);">Alerts above threshold trigger immediate notification</div>
+                                </div>
+                                <input type="checkbox" id="set-auto-escalate" ${settingsState.autoEscalate ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--accent);">
+                            </label>
+
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; opacity: 0.55;">
+                                <div>
+                                    <div style="font-weight: 500; font-size: 13px;">Allow autonomous response <span class="badge sev-critical" style="margin-left: 6px;">LOCKED</span></div>
+                                    <div style="font-size: 11px; color: var(--text-muted);">Disabled by design — the workflow cannot execute destructive actions</div>
+                                </div>
+                                <input type="checkbox" disabled style="width: 18px; height: 18px;">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Notifications -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Notifications</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 14px;">
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                                <div>
+                                    <div style="font-weight: 500; font-size: 13px;">In-app notifications</div>
+                                    <div style="font-size: 11px; color: var(--text-muted);">Toast alerts and bell icon updates</div>
+                                </div>
+                                <input type="checkbox" id="set-notif-inapp" ${settingsState.notificationsInApp ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--accent);">
+                            </label>
+
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                                <div>
+                                    <div style="font-weight: 500; font-size: 13px;">Email escalation notifications</div>
+                                    <div style="font-size: 11px; color: var(--text-muted);">Sent to incident-response team on high-risk alerts</div>
+                                </div>
+                                <input type="checkbox" id="set-notif-email" ${settingsState.notificationsEmail ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--accent);">
+                            </label>
+
+                            <div style="padding-top: 10px; border-top: 1px solid var(--border);">
+                                <div class="kpi-label">Escalation recipients</div>
+                                <div style="margin-top: 6px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                                    palashvashisth71@gmail.com<br>
+                                    bhumiverma2000@gmail.com
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deployment -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <span class="card-title">Deployment</span>
+                        <span class="badge sev-low">LIVE</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <div class="kpi-label">Frontend Host</div>
+                            <div style="margin-top: 6px; font-size: 13px;">GitHub Pages</div>
+                            <div style="margin-top: 2px; font-size: 11px; color: var(--text-muted); font-family: monospace;">shutterque.github.io/agentic-ai-soc</div>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Orchestration Host</div>
+                            <div style="margin-top: 6px; font-size: 13px;">n8n Cloud</div>
+                            <div style="margin-top: 2px; font-size: 11px; color: var(--text-muted); font-family: monospace;">soc-agentic.app.n8n.cloud</div>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Webhook Endpoint</div>
+                            <div style="margin-top: 6px; font-size: 11px; color: var(--text-muted); font-family: monospace; word-break: break-all;">${settingsState.webhookUrl}</div>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Environment</div>
+                            <div style="margin-top: 6px; font-size: 13px;">Production <span style="color: var(--text-muted); font-size: 11px;">· Free tier</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- About -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">About</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 13px;">
+                        <div>
+                            <div class="kpi-label">Organisation</div>
+                            <div style="margin-top: 6px;">${settingsState.orgName}</div>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Project</div>
+                            <div style="margin-top: 6px;">Governed Agentic AI for SOC Alert Investigation</div>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Team</div>
+                            <div style="margin-top: 6px;">Palash Vashisth · Bhumi Verma · Dhruv Sharma · Somik Sen</div>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Version</div>
+                            <div style="margin-top: 6px;">v1.0 · Prototype</div>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Repository</div>
+                            <div style="margin-top: 6px;">
+                                <a href="https://github.com/shutterque/agentic-ai-soc" target="_blank" style="color: var(--accent);">github.com/shutterque/agentic-ai-soc</a>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Governance Framework</div>
+                            <div style="margin-top: 6px;">NIST AI RMF · OWASP LLM Top 10</div>
+                        </div>
+                    </div>
+                </div>
+            `;
         }
 
         // Initialize on load
