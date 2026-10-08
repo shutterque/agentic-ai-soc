@@ -726,7 +726,27 @@ min-width: 0;
             from { opacity: 1; transform: translateX(0); }
             to   { opacity: 0; transform: translateX(30px); }
         }
-                .toast.removing { animation: slideOut 0.3s ease forwards; }
+                       .toast.removing { animation: slideOut 0.3s ease forwards; }
+
+        /* Light theme overrides */
+        body.light-theme {
+            --bg-base: #f8fafc;
+            --bg-panel: #ffffff;
+            --bg-panel-hover: #f1f5f9;
+            --border: #e2e8f0;
+            --border-light: #cbd5e1;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+        }
+        body.light-theme .ai-panel {
+            background: linear-gradient(145deg, #ffffff 0%, rgba(14, 165, 233, 0.06) 100%);
+        }
+        body.light-theme .modal-overlay { background: rgba(15, 23, 42, 0.4); }
+        body.light-theme .toast { background: #ffffff; }
+        body.light-theme .mock-warning-banner {
+            background: rgba(245, 158, 11, 0.08);
+        }
 
         /* Search results dropdown */
         .search-results {
@@ -929,6 +949,9 @@ min-width: 0;
                         <div class="status-dot"></div>
                         <span>SYSTEM ONLINE</span>
                     </div>
+                    <button class="icon-btn" id="theme-toggle-btn" title="Toggle theme">
+                        <i class="ph ph-moon" id="theme-icon"></i>
+                    </button>
                     <div class="notification-wrapper">
                         <button class="icon-btn" id="notification-btn" style="position: relative;">
                             <i class="ph ph-bell"></i>
@@ -2146,8 +2169,11 @@ agentsContainer.innerHTML = `
 `;
 
 
-            // Make investigation link visible in sidebar temporarily for UX context
+                     // Make investigation link visible in sidebar temporarily for UX context
 document.getElementById('nav-investigation').style.display = 'flex';
+
+// Restore any prior investigation state for this specific alert
+restoreInvestigationState(alertId);
 
 navigateTo('view-investigation');
         }
@@ -2371,7 +2397,10 @@ if (reviewPanel) {
     reviewPanel.style.display = 'block';
 }
 
-        } catch (error) {
+// Persist this investigation's UI state so it survives navigation
+saveInvestigationState(alert.id);
+
+    } catch (error) {
 
         console.error('Analysis failed:', error);
 
@@ -2682,11 +2711,13 @@ function selectAgent(index) {
                     });
 
                     // Toast
-                    showToast(
+                                        showToast(
                         actionName === 'Escalate Alert' ? 'warning' : 'success',
                         `Action: ${actionName}`,
                         `Recorded in audit log for ${appState.selectedAlertId || 'selected alert'}.`
                     );
+
+                    saveInvestigationState(appState.selectedAlertId);
                 }
             );
         }
@@ -2752,13 +2783,16 @@ function selectAgent(index) {
                         alert: appState.selectedAlertId || 'N/A'
                     });
 
-                    showToast(
+                                        showToast(
                         isApproved ? 'success' : 'warning',
                         isApproved ? 'Recommendation Approved' : 'Recommendation Rejected',
                         isApproved
                             ? 'Response action authorised. Entry recorded in audit log.'
                             : 'Investigation reopened. Entry recorded in audit log.'
                     );
+
+                    // Persist updated state
+                    saveInvestigationState(appState.selectedAlertId);
                 }
             );
         }
@@ -3684,12 +3718,104 @@ function selectAgent(index) {
         }
 
         // ---------- INIT EXTENSIONS ----------
-        const _originalInitApp = initApp;
+                const _originalInitApp = initApp;
         initApp = async function() {
             await _originalInitApp();
             initSearch();
             initNotifications();
+            initTheme();
         };
+               // ---------- INVESTIGATION STATE CACHE ----------
+        // Persists each alert's investigation UI so it survives page navigation.
+        const investigationCache = {};
+
+        function saveInvestigationState(alertId) {
+            if (!alertId) return;
+            const aiResult = document.getElementById('ai-analysis-result');
+            const aiPlaceholder = document.getElementById('ai-analysis-placeholder');
+            const timeline = document.getElementById('inv-event-timeline');
+            const agents = document.getElementById('inv-agent-cards');
+            const reviewPanel = document.getElementById('human-review-panel');
+            const riskEl = document.getElementById('inv-risk');
+            const riskEnd = document.getElementById('risk-endpoint');
+            const riskNet = document.getElementById('risk-network');
+            const riskId = document.getElementById('risk-identity');
+            const riskTi = document.getElementById('risk-ti');
+
+            investigationCache[alertId] = {
+                aiResultVisible: aiResult && aiResult.style.display !== 'none',
+                aiResultHTML: aiResult ? aiResult.innerHTML : '',
+                aiPlaceholderHTML: aiPlaceholder ? aiPlaceholder.innerHTML : '',
+                timelineHTML: timeline ? timeline.innerHTML : '',
+                agentsHTML: agents ? agents.innerHTML : '',
+                reviewVisible: reviewPanel && reviewPanel.style.display !== 'none',
+                reviewHTML: reviewPanel ? reviewPanel.innerHTML : '',
+                reviewClass: reviewPanel ? reviewPanel.className : '',
+                reviewStyle: reviewPanel ? (reviewPanel.getAttribute('style') || '') : '',
+                riskText: riskEl ? riskEl.innerText : 'Not analyzed',
+                riskClass: riskEl ? riskEl.className : 'badge',
+                riskEnd: riskEnd ? riskEnd.innerText : 'Awaiting Analysis',
+                riskNet: riskNet ? riskNet.innerText : 'Awaiting Analysis',
+                riskId: riskId ? riskId.innerText : 'Awaiting Analysis',
+                riskTi: riskTi ? riskTi.innerText : 'Awaiting Analysis'
+            };
+        }
+
+        function restoreInvestigationState(alertId) {
+            const c = investigationCache[alertId];
+            if (!c) return false;
+
+            const aiResult = document.getElementById('ai-analysis-result');
+            const aiPlaceholder = document.getElementById('ai-analysis-placeholder');
+            const timeline = document.getElementById('inv-event-timeline');
+            const agents = document.getElementById('inv-agent-cards');
+            const reviewPanel = document.getElementById('human-review-panel');
+            const riskEl = document.getElementById('inv-risk');
+            const riskEnd = document.getElementById('risk-endpoint');
+            const riskNet = document.getElementById('risk-network');
+            const riskId = document.getElementById('risk-identity');
+            const riskTi = document.getElementById('risk-ti');
+
+            if (c.aiResultVisible && aiResult) {
+                aiResult.innerHTML = c.aiResultHTML;
+                aiResult.style.display = 'block';
+                if (aiPlaceholder) aiPlaceholder.style.display = 'none';
+            }
+            if (timeline && c.timelineHTML) timeline.innerHTML = c.timelineHTML;
+            if (agents && c.agentsHTML) agents.innerHTML = c.agentsHTML;
+            if (reviewPanel && c.reviewVisible) {
+                reviewPanel.innerHTML = c.reviewHTML;
+                reviewPanel.className = c.reviewClass;
+                if (c.reviewStyle) reviewPanel.setAttribute('style', c.reviewStyle);
+                else reviewPanel.style.display = 'block';
+            }
+            if (riskEl) { riskEl.innerText = c.riskText; riskEl.className = c.riskClass; }
+            if (riskEnd) riskEnd.innerText = c.riskEnd;
+            if (riskNet) riskNet.innerText = c.riskNet;
+            if (riskId) riskId.innerText = c.riskId;
+            if (riskTi) riskTi.innerText = c.riskTi;
+
+            return true;
+        }
+
+        // ---------- THEME TOGGLE ----------
+        function initTheme() {
+            const btn = document.getElementById('theme-toggle-btn');
+            const icon = document.getElementById('theme-icon');
+            if (!btn) return;
+
+            const saved = localStorage.getItem('soc-theme') || 'dark';
+            if (saved === 'light') {
+                document.body.classList.add('light-theme');
+                if (icon) icon.className = 'ph ph-sun';
+            }
+
+            btn.addEventListener('click', () => {
+                const isLight = document.body.classList.toggle('light-theme');
+                if (icon) icon.className = isLight ? 'ph ph-sun' : 'ph ph-moon';
+                localStorage.setItem('soc-theme', isLight ? 'light' : 'dark');
+            });
+        }
 
         // Initialize on load
         window.addEventListener('DOMContentLoaded', initApp);
