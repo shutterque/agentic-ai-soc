@@ -1074,8 +1074,68 @@ min-width: 0;
         </button>
     </div>
 
-    <div id="priority-queue">
+       <div id="priority-queue">
         <!-- Populated by JS -->
+    </div>
+</div>
+
+<!-- Row: Operational Metrics -->
+<div class="grid-4 mb-4" id="dashboard-ops-metrics"></div>
+
+<!-- Row: Agent Health Strip -->
+<div class="card mb-4">
+    <div class="card-header">
+        <div>
+            <span class="card-title">Agent Health</span>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Live status of the five specialist agents.</div>
+        </div>
+        <button class="btn btn-outline" onclick="navigateTo('view-agents')">Manage Agents</button>
+    </div>
+    <div id="dashboard-agent-strip" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px;"></div>
+</div>
+
+<!-- Row: Top Sources + Top Assets -->
+<div class="grid-2 mb-4">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Top Alert Sources</span>
+        </div>
+        <div id="dashboard-top-sources"></div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Top Impacted Assets</span>
+        </div>
+        <div id="dashboard-top-assets"></div>
+    </div>
+</div>
+
+<!-- Row: Recent Decisions + Model Snapshot -->
+<div class="grid-3 mb-4">
+    <div class="card" style="grid-column: span 2;">
+        <div class="card-header">
+            <span class="card-title">Recent Analyst Decisions</span>
+            <button class="btn btn-outline" onclick="navigateTo('view-audit')">Full Audit Log</button>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Alert</th>
+                        <th>Decision</th>
+                        <th>Actor</th>
+                    </tr>
+                </thead>
+                <tbody id="dashboard-recent-decisions"></tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Model Snapshot</span>
+        </div>
+        <div id="dashboard-model-snapshot"></div>
     </div>
 </div>
 
@@ -1643,6 +1703,160 @@ min-width: 0;
             if (viewId === 'view-settings') renderSettingsPage();
         }
 
+                function renderDashboardExtras() {
+            if (!mockAlerts || mockAlerts.length === 0) return;
+
+            const total = mockAlerts.length;
+            const resolved = mockAlerts.filter(a => ['Resolved', 'Closed'].includes(a.status)).length;
+            const escalated = mockAlerts.filter(a => (a.status || '').toLowerCase().includes('escalat')).length;
+            const pending = mockAlerts.filter(a => (a.status || '').toLowerCase().includes('review')).length;
+            const autoCloseRate = total ? Math.round((resolved / total) * 100) : 0;
+
+            // --- Operational Metrics Row ---
+            const opsEl = document.getElementById('dashboard-ops-metrics');
+            if (opsEl) {
+                opsEl.innerHTML = `
+                    <div class="card">
+                        <div class="kpi-label">Mean Time to Triage</div>
+                        <div class="kpi-value">4.2<span style="font-size: 16px; color: var(--text-muted);"> min</span></div>
+                        <div class="kpi-label mt-2" style="color: var(--success);">↓ 62% vs manual baseline</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Analyst Override Rate</div>
+                        <div class="kpi-value">12<span style="font-size: 16px; color: var(--text-muted);">%</span></div>
+                        <div class="kpi-label mt-2">Below 30% abort threshold</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Resolved / Closed</div>
+                        <div class="kpi-value">${resolved}<span style="font-size: 16px; color: var(--text-muted);">/${total}</span></div>
+                        <div class="kpi-label mt-2">${autoCloseRate}% of queue cleared</div>
+                    </div>
+                    <div class="card">
+                        <div class="kpi-label">Pending Review</div>
+                        <div class="kpi-value" style="color: var(--warning);">${pending}</div>
+                        <div class="kpi-label mt-2">${escalated} escalated to IR</div>
+                    </div>
+                `;
+            }
+
+            // --- Agent Health Strip ---
+            const stripEl = document.getElementById('dashboard-agent-strip');
+            if (stripEl) {
+                const agents = [
+                    { name: 'Correlation', icon: 'ph-git-merge', conf: '94%' },
+                    { name: 'Threat Intel', icon: 'ph-shield-search', conf: '96%' },
+                    { name: 'Network', icon: 'ph-activity', conf: '85%' },
+                    { name: 'Asset / Device', icon: 'ph-desktop', conf: '91%' },
+                    { name: 'Identity / User', icon: 'ph-user-focus', conf: '88%' }
+                ];
+                stripEl.innerHTML = agents.map(a => `
+                    <div style="padding: 14px; background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-md); text-align: center;">
+                        <i class="ph ${a.icon}" style="font-size: 22px; color: var(--accent);"></i>
+                        <div style="font-size: 12px; font-weight: 600; margin-top: 8px;">${a.name}</div>
+                        <div style="margin-top: 6px;"><span class="badge sev-low">ONLINE</span></div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Conf ${a.conf}</div>
+                    </div>
+                `).join('');
+            }
+
+            // --- Top Alert Sources ---
+            const sourcesEl = document.getElementById('dashboard-top-sources');
+            if (sourcesEl) {
+                const counts = {};
+                mockAlerts.forEach(a => {
+                    const s = a.source || 'Unknown';
+                    counts[s] = (counts[s] || 0) + 1;
+                });
+                const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+                const max = top[0] ? top[0][1] : 1;
+                sourcesEl.innerHTML = top.map(([name, count]) => `
+                    <div style="margin-bottom: 14px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
+                            <span style="font-weight: 500;">${name}</span>
+                            <span style="color: var(--text-secondary);">${count}</span>
+                        </div>
+                        <div style="height: 6px; background: var(--bg-base); border-radius: 3px; overflow: hidden;">
+                            <div style="height: 100%; width: ${(count / max) * 100}%; background: var(--accent);"></div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // --- Top Impacted Assets ---
+            const assetsEl = document.getElementById('dashboard-top-assets');
+            if (assetsEl) {
+                const counts = {};
+                mockAlerts.forEach(a => {
+                    const s = a.asset || 'Unknown';
+                    counts[s] = (counts[s] || 0) + 1;
+                });
+                const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+                const max = top[0] ? top[0][1] : 1;
+                assetsEl.innerHTML = top.map(([name, count]) => `
+                    <div style="margin-bottom: 14px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
+                            <span style="font-weight: 500;">${name}</span>
+                            <span style="color: var(--text-secondary);">${count}</span>
+                        </div>
+                        <div style="height: 6px; background: var(--bg-base); border-radius: 3px; overflow: hidden;">
+                            <div style="height: 100%; width: ${(count / max) * 100}%; background: var(--warning);"></div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // --- Recent Analyst Decisions ---
+            const decisionsEl = document.getElementById('dashboard-recent-decisions');
+            if (decisionsEl && typeof auditEntries !== 'undefined' && auditEntries.length) {
+                decisionsEl.innerHTML = auditEntries.slice(0, 5).map(e => {
+                    const cls = e.decisionType === 'low' ? 'sev-low'
+                              : e.decisionType === 'critical' ? 'sev-critical'
+                              : e.decisionType === 'high' ? 'sev-high'
+                              : 'badge-outline';
+                    return `
+                        <tr>
+                            <td style="font-size: 12px; color: var(--text-muted);">${e.ts}</td>
+                            <td style="color: var(--accent); font-weight: 500;">${e.alert}</td>
+                            <td><span class="badge ${cls}">${e.decision}</span></td>
+                            <td style="font-size: 12px;">${e.actor}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+            // --- Model Snapshot ---
+            const modelEl = document.getElementById('dashboard-model-snapshot');
+            if (modelEl) {
+                modelEl.innerHTML = `
+                    <div style="padding: 12px; background: var(--bg-base); border-left: 3px solid var(--success); border-radius: var(--radius-md); margin-bottom: 12px;">
+                        <div style="font-weight: 600; color: var(--success); margin-bottom: 4px;">Recommended: qwen3.8-27b</div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">3/3 classification · 3/3 escalation · 1.01s avg</div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 12px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Orchestrator</span>
+                            <span style="font-family: monospace; font-size: 11px;">qwen3.8-27b</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Specialists</span>
+                            <span style="font-family: monospace; font-size: 11px;">gpt-oss-20b</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Provider</span>
+                            <span>Groq API</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Compliance</span>
+                            <span class="badge sev-low">100%</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-outline mt-4" style="width: 100%; font-size: 12px;" onclick="navigateTo('view-models')">
+                        <i class="ph ph-chart-bar"></i> Full Comparison
+                    </button>
+                `;
+            }
+        }
+
         function renderDashboard() {
             // Render KPI values from current alert data
 const active = mockAlerts.filter(
@@ -1673,6 +1887,7 @@ document.getElementById('kpi-investigating').innerText = investigating;
 document.getElementById('kpi-review').innerText = pendingReview;
 document.getElementById('nav-alert-badge').innerText = active;
 
+renderDashboardExtras();
 
 
             // Render Alert Bar Chart (CSS flex)
