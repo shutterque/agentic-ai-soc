@@ -1916,6 +1916,71 @@ const reviewPanel = document.getElementById('human-review-panel');
 
 if (reviewPanel) {
     reviewPanel.style.display = 'none';
+    // Restore the panel's original structure if a previous decision replaced it
+    reviewPanel.className = 'card human-review-panel';
+    reviewPanel.style.borderColor = '';
+    reviewPanel.style.background = '';
+    reviewPanel.innerHTML = `
+        <div class="human-review-header">
+            <i class="ph-fill ph-warning-circle"></i>
+            HUMAN ANALYST REVIEW REQUIRED
+        </div>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+            AI-generated recommendations do not constitute autonomous security decisions. Consequential actions require authorized human review.
+        </p>
+        <div style="background: var(--bg-panel); padding: 12px; border-radius: var(--radius-md); margin-bottom: 16px;">
+            <div class="kpi-label mb-2">AI Recommendation:</div>
+            <div style="font-weight: 500;">Isolate Host & Escalate for Incident Response</div>
+            <div class="kpi-label mt-2 mb-2">Reason:</div>
+            <div style="font-size: 12px; color: var(--text-secondary);">Multiple correlated indicators (Process, Network, TI) confirm malicious intent with 94% confidence.</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <button class="btn btn-success" onclick="triggerApproval(true)" style="width: 100%;">Approve</button>
+            <button class="btn btn-danger" onclick="triggerApproval(false)" style="width: 100%;">Reject</button>
+        </div>
+        <button class="btn btn-outline mt-4" style="width: 100%;" onclick="triggerAction('Request More Evidence')">
+            Request More Evidence
+        </button>
+    `;
+}
+
+// Reset the AI summary panel so the previous investigation does not persist
+const aiPlaceholder = document.getElementById('ai-analysis-placeholder');
+const aiResult = document.getElementById('ai-analysis-result');
+
+if (aiPlaceholder) {
+    aiPlaceholder.style.display = 'block';
+    aiPlaceholder.innerHTML = `
+        <i class="ph ph-info"></i>
+        Alert has not been analyzed yet.
+        Click <strong>Analyze Alert</strong> to start the multi-agent investigation.
+    `;
+}
+if (aiResult) {
+    aiResult.style.display = 'none';
+}
+
+// Reset the event timeline
+const eventTimeline = document.getElementById('inv-event-timeline');
+if (eventTimeline) {
+    eventTimeline.innerHTML = `
+        <div style="
+            padding: 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            border: 1px dashed var(--border-light);
+            border-radius: var(--radius-md);
+        ">
+            <i class="ph ph-hourglass" style="font-size: 24px; margin-bottom: 8px;"></i>
+            <div style="font-weight: 500; margin-bottom: 4px;">
+                Awaiting Analysis
+            </div>
+            <div style="font-size: 12px;">
+                Investigation events will appear after
+                <strong>Analyze Alert</strong> is selected.
+            </div>
+        </div>
+    `;
 }
 
 
@@ -2006,13 +2071,14 @@ async function analyzeCurrentAlert() {
             '<i class="ph ph-spinner"></i> AI investigation in progress...';
     }
 
-    if (resultPanel) {
+        if (resultPanel) {
         resultPanel.style.display = 'none';
     }
 
+    // Capture real start time BEFORE the AI call so the timeline reflects true elapsed time
+    const analysisStartedAt = performance.now();
+
     try {
-
-
 
         await investigateAlert(alert);
 
@@ -2052,8 +2118,6 @@ if (investigationActivity.length > 5) {
 if (appState.currentPage === 'view-dashboard') {
     renderDashboard();
 }
-
-const analysisStartedAt = performance.now();
 
 
 // Show specialist-agent execution after the investigation completes
@@ -2164,14 +2228,30 @@ if (reviewPanel) {
     reviewPanel.style.display = 'block';
 }
 
-    } catch (error) {
+        } catch (error) {
 
         console.error('Analysis failed:', error);
 
         if (placeholder) {
-            placeholder.innerHTML =
-                '<i class="ph ph-warning"></i> AI investigation failed.';
+            placeholder.style.display = 'block';
+            placeholder.innerHTML = `
+                <i class="ph ph-warning-circle" style="color: var(--critical);"></i>
+                AI investigation failed. The orchestrator may be unavailable or rate-limited.
+                <br><br>
+                <button class="btn btn-outline" onclick="analyzeCurrentAlert()" style="font-size: 12px;">
+                    <i class="ph ph-arrow-clockwise"></i> Retry Analysis
+                </button>
+            `;
         }
+
+        if (resultPanel) {
+            resultPanel.style.display = 'none';
+        }
+
+        const rp = document.getElementById('human-review-panel');
+        if (rp) rp.style.display = 'none';
+
+        showToast('error', 'Investigation Failed', 'The orchestrator did not respond. Wait 60 seconds and retry.');
 
     } finally {
 
