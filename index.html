@@ -1278,8 +1278,8 @@ min-width: 0;
 
     <div id="ai-analysis-result" style="display: none;">
 
-        <p id="ai-summary-text" class="ai-text"></p>
-
+        <div id="ai-summary-text" class="ai-text"></div>
+        
         <div style="
             display: flex;
             gap: 24px;
@@ -2245,7 +2245,7 @@ if (resultPanel) {
 }
 
 if (summaryText) {
-    summaryText.textContent = summary;
+    summaryText.innerHTML = renderStructuredReport(summary);
 }
 
 if (confidence) {
@@ -4031,13 +4031,14 @@ function selectAgent(index) {
         }
 
         // ---------- INIT EXTENSIONS ----------
-                       const _originalInitApp = initApp;
+        const _originalInitApp = initApp;
         initApp = async function() {
             await _originalInitApp();
             loadSettings();
             initSearch();
             initNotifications();
             initTheme();
+            initAlertSimulator();
         };
                // ---------- INVESTIGATION STATE CACHE ----------
         // Persists each alert's investigation UI so it survives page navigation.
@@ -4371,6 +4372,192 @@ function selectAgent(index) {
                     </div>
                 </div>
             `;
+        }
+
+              // ---------- STRUCTURED AI REPORT PARSER ----------
+        function parseAIReport(text) {
+            if (!text) return null;
+            const clean = String(text);
+
+            // Section markers in priority order. Captures the heading and the body up to the next heading.
+            const sections = [
+                { key: 'summary',   patterns: ['Executive Summary', 'Investigation Summary', 'Summary'], icon: 'ph-file-text' },
+                { key: 'findings',  patterns: ['Key Findings', 'Findings'], icon: 'ph-list-magnifying-glass' },
+                { key: 'risk',      patterns: ['Risk Assessment', 'Risk'], icon: 'ph-warning-octagon' },
+                { key: 'recommendation', patterns: ['Recommendation', 'Recommended Next Step', 'Next Step'], icon: 'ph-arrow-bend-up-right' },
+                { key: 'confidence', patterns: ['Confidence', 'Confidence Level'], icon: 'ph-gauge' }
+            ];
+
+            // Build a combined regex that finds any marker (case-insensitive) preceded by ##, **, or a number+dot, or plain start
+            const result = {};
+            const allMarkers = [];
+            sections.forEach(s => s.patterns.forEach(p => allMarkers.push({ section: s.key, marker: p })));
+
+            // Find all marker positions in the text
+            const markerRegex = new RegExp(
+                '(?:^|\\n)(?:#{1,3}\\s*|\\*\\*|\\d+\\.\\s*)((?:' +
+                allMarkers.map(m => m.marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') +
+                '))\\s*[:\\-\\*]*',
+                'gi'
+            );
+
+            const positions = [];
+            let match;
+            while ((match = markerRegex.exec(clean)) !== null) {
+                const foundMarker = match[1];
+                const sectionDef = allMarkers.find(m => m.marker.toLowerCase() === foundMarker.toLowerCase());
+                if (sectionDef) {
+                    positions.push({
+                        key: sectionDef.section,
+                        start: match.index,
+                        endOfHeading: match.index + match[0].length
+                    });
+                }
+            }
+
+            if (positions.length >= 2) {
+                positions.forEach((pos, i) => {
+                    const bodyEnd = i + 1 < positions.length ? positions[i + 1].start : clean.length;
+                    const body = clean.slice(pos.endOfHeading, bodyEnd).trim();
+                    if (body && !result[pos.key]) result[pos.key] = body;
+                });
+                return result;
+            }
+            return null;
+        }
+
+        function renderStructuredReport(text) {
+            const parsed = parseAIReport(text);
+
+            if (!parsed) {
+                // Fallback: show raw with preserved formatting
+                return `<div style="white-space: pre-wrap; font-size: 13px; line-height: 1.7; color: var(--text-primary);">${escapeHtml(text)}</div>`;
+            }
+
+            const sections = [
+                { key: 'summary',        label: 'Executive Summary',      icon: 'ph-file-text',            color: 'var(--accent)' },
+                { key: 'findings',       label: 'Key Findings',           icon: 'ph-list-magnifying-glass', color: 'var(--accent)' },
+                { key: 'risk',           label: 'Risk Assessment',        icon: 'ph-warning-octagon',      color: 'var(--warning)' },
+                { key: 'recommendation', label: 'Recommendation',         icon: 'ph-arrow-bend-up-right',  color: 'var(--success)' },
+                { key: 'confidence',     label: 'Confidence',             icon: 'ph-gauge',                color: 'var(--text-secondary)' }
+            ];
+
+            const blocks = sections.map(s => {
+                const body = parsed[s.key];
+                if (!body) return '';
+
+                // For findings and recommendations, try to convert numbered/bulleted lists to styled bullets
+                let content = body;
+
+                if (s.key === 'findings' || s.key === 'recommendation') {
+                    // Split into lines and format bullets
+                    const lines = body.split(/\n+/).map(l => l.trim()).filter(Boolean);
+                    if (lines.length > 1) {
+                        content = '<div style="display:flex;flex-direction:column;gap:8px;">' +
+                            lines.map(l => {
+                                const clean = l.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
+                                return `<div style="display:flex;gap:10px;align-items:flex-start;">
+                                    <i class="ph ph-caret-right" style="color:${s.color};font-size:12px;margin-top:5px;flex-shrink:0;"></i>
+                                    <span>${escapeHtml(clean)}</span>
+                                </div>`;
+                            }).join('') + '</div>';
+                    } else {
+                        content = `<div>${escapeHtml(content)}</div>`;
+                    }
+                } else {
+                    content = `<div style="line-height:1.7;">${escapeHtml(content)}</div>`;
+                }
+
+                return `
+                    <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:${s.color};">
+                            <i class="ph ${s.icon}"></i>
+                            ${s.label}
+                        </div>
+                        <div style="font-size:13px;color:var(--text-primary);">${content}</div>
+                    </div>
+                `;
+            }).filter(Boolean).join('');
+
+            return blocks || `<div style="white-space: pre-wrap;">${escapeHtml(text)}</div>`;
+        }
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        // ---------- LIVE ALERT SIMULATOR ----------
+        const simulatedAlertTemplates = [
+            { type: 'Suspicious SMB Share Enumeration', severity: 'High', source: 'EDR', asset: 'FILE-SRV-03', user: 'unknown', source_ip: '10.10.4.28', destination_ip: '10.10.20.5', destination_port: '445', protocol: 'SMB', description: 'Rapid enumeration of SMB shares across the file server subnet from a non-admin endpoint.' },
+            { type: 'Anomalous Cloud API Activity', severity: 'High', source: 'Cloud Trail', asset: 'AWS-Prod', user: 'svc_deploy', source_ip: '198.51.100.180', destination_ip: '10.0.0.5', destination_port: '443', protocol: 'HTTPS', domain: 'api.example-cloud.com', description: 'Unexpected IAM role assumption from an unfamiliar region outside business hours.' },
+            { type: 'Malicious Attachment Detected', severity: 'Critical', source: 'Email Gateway', asset: 'MAIL-GW-01', user: 'a.kumar', source_ip: '203.0.113.99', destination_ip: '10.10.7.12', destination_port: '443', protocol: 'HTTPS', description: 'Inbound email with a weaponized .xlsm attachment. Sandbox detonation flagged C2 callback.' },
+            { type: 'Kerberoasting Attempt', severity: 'Critical', source: 'Active Directory', asset: 'DC-01', user: 'svc_unknown', source_ip: '10.10.3.44', destination_ip: '10.10.0.10', destination_port: '88', protocol: 'Kerberos', description: 'Multiple SPN ticket requests (TGS-REQ) with weak encryption types from a single source.' },
+            { type: 'Unusual Data Transfer to External Host', severity: 'High', source: 'Proxy', asset: 'DEV-WS-019', user: 'r.gupta', source_ip: '10.10.22.88', destination_ip: '198.51.100.201', destination_port: '443', protocol: 'HTTPS', domain: 'files.example-transfer.io', description: '4.2 GB uploaded to an external cloud storage endpoint not in the approved list.' }
+        ];
+
+        let simulatorTimer = null;
+        let simulatedCount = 0;
+        const SIMULATOR_MAX = 5;
+        const SIMULATOR_INTERVAL_MS = 60000;
+
+        function initAlertSimulator() {
+            if (simulatorTimer) return;
+
+            simulatorTimer = setInterval(() => {
+                if (simulatedCount >= SIMULATOR_MAX) {
+                    clearInterval(simulatorTimer);
+                    simulatorTimer = null;
+                    return;
+                }
+                injectSimulatedAlert();
+            }, SIMULATOR_INTERVAL_MS);
+        }
+
+        function injectSimulatedAlert() {
+            const template = simulatedAlertTemplates[simulatedCount % simulatedAlertTemplates.length];
+            const newId = 'ALT-2026-' + String(100 + simulatedCount).padStart(3, '0');
+
+            const newAlert = {
+                id: newId,
+                case_type: template.severity === 'Critical' ? 'high-risk' : 'ambiguous',
+                severity: template.severity,
+                type: template.type,
+                source: template.source,
+                asset: template.asset,
+                user: template.user,
+                source_ip: template.source_ip,
+                destination_ip: template.destination_ip,
+                source_port: '49' + (100 + simulatedCount),
+                destination_port: template.destination_port,
+                protocol: template.protocol,
+                domain: template.domain || '',
+                hash: '',
+                description: template.description,
+                detected: 'Just now',
+                status: 'New',
+                risk: template.severity === 'Critical' ? 88 : 68
+            };
+
+            mockAlerts.unshift(newAlert);
+            simulatedCount++;
+
+            // Re-render whatever page is active
+            if (appState.currentPage === 'view-dashboard') renderDashboard();
+            if (appState.currentPage === 'view-alerts') renderAlertsPage();
+
+            // Update nav badge
+            const active = mockAlerts.filter(a => !['Resolved', 'Closed'].includes(a.status)).length;
+            const badge = document.getElementById('nav-alert-badge');
+            if (badge) badge.innerText = active;
+
+            // Toast
+            showToast('info', 'New alert received', `${newAlert.id} · ${newAlert.type}`);
+
+            // Push notification
+            pushNotification('New alert in queue', `${newAlert.id} · ${newAlert.severity} · ${newAlert.asset}`, newAlert.id);
         }
 
         // Initialize on load
